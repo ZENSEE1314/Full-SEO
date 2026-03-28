@@ -1,0 +1,97 @@
+{
+  "name": "NEXUS - Search Console Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "triggerAtHour": 7 }]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 7AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT gc.*, c.domain, c.id as client_id FROM google_connections gc JOIN clients c ON gc.client_id = c.id WHERE gc.service = 'search_console' AND c.status = 'active'"
+      },
+      "id": "fetch-connections",
+      "name": "Fetch SC Connections",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [460, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/webmasters/v3/sites/={{encodeURIComponent($json.property_url)}}/searchAnalytics/query",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "startDate", "value": "={{$now.minus({days: 7}).toFormat('yyyy-MM-dd')}}" },
+            { "name": "endDate", "value": "={{$now.minus({days: 1}).toFormat('yyyy-MM-dd')}}" },
+            { "name": "dimensions", "value": "[\"query\"]" },
+            { "name": "rowLimit", "value": "100" }
+          ]
+        },
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{$json.access_token}}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "query-search-console",
+      "name": "Query Search Console",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const connection = $('Fetch SC Connections').item.json;\nconst data = $input.item.json;\nconst rows = data.rows || [];\n\nreturn rows.map(row => ({\n  json: {\n    client_id: connection.client_id,\n    keyword: row.keys[0],\n    impressions: row.impressions,\n    clicks: row.clicks,\n    ctr: Math.round(row.ctr * 10000) / 100,\n    position: Math.round(row.position * 10) / 10,\n    search_volume: row.impressions\n  }\n}));"
+      },
+      "id": "parse-sc-data",
+      "name": "Parse SC Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO keywords (client_id, keyword, search_volume, current_rank, source, is_tracked) VALUES ('{{$json.client_id}}', '{{$json.keyword}}', {{$json.search_volume}}, {{Math.round($json.position)}}, 'search_console', false) ON CONFLICT (client_id, keyword) DO UPDATE SET search_volume = EXCLUDED.search_volume, current_rank = {{Math.round($json.position)}}, updated_at = now()"
+      },
+      "id": "upsert-keywords",
+      "name": "Upsert Keywords",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1120, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO agent_action_log (client_id, module, action_type, summary, details, status, triggered_by) VALUES ('{{$json.client_id}}', 'intelligence', 'search_console_sync', 'Synced Search Console data: {{$json.keyword}} (pos: {{Math.round($json.position)}})', '{\"clicks\": {{$json.clicks}}, \"impressions\": {{$json.impressions}}, \"ctr\": {{$json.ctr}}}', 'success', 'n8n-sc-sync')"
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1340, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    }
+  ],
+  "connections": {
+    "Daily 7AM": { "main": [[{ "node": "Fetch SC Connections", "type": "main", "index": 0 }]] },
+    "Fetch SC Connections": { "main": [[{ "node": "Query Search Console", "type": "main", "index": 0 }]] },
+    "Query Search Console": { "main": [[{ "node": "Parse SC Data", "type": "main", "index": 0 }]] },
+    "Parse SC Data": { "main": [[{ "node": "Upsert Keywords", "type": "main", "index": 0 }]] },
+    "Upsert Keywords": { "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "NEXUS-SEO" }]
+}

@@ -1,0 +1,128 @@
+{
+  "name": "NEXUS - Technical Audit",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "technical-audit",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Audit Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "technical-audit"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT * FROM clients WHERE id = '{{$json.body.clientId}}' AND status = 'active'"
+      },
+      "id": "fetch-client",
+      "name": "Fetch Client",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [460, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "url": "=https://{{$json[0].domain}}/sitemap.xml",
+        "options": { "timeout": 15000 }
+      },
+      "id": "fetch-sitemap",
+      "name": "Fetch Sitemap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const xml = $input.item.json.data || $input.item.json.body || '';\nconst urls = [];\nconst regex = /<loc>([^<]+)<\\/loc>/g;\nlet match;\nwhile ((match = regex.exec(xml)) !== null) {\n  urls.push(match[1]);\n}\nreturn urls.slice(0, 50).map(url => ({ json: { url, client_id: $('Fetch Client').item.json[0].id, domain: $('Fetch Client').item.json[0].domain } }));"
+      },
+      "id": "parse-sitemap",
+      "name": "Parse Sitemap URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": { "batchSize": 5, "options": {} },
+      "id": "batch-urls",
+      "name": "Batch URLs",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/pagespeedonline/v5/runPagespeedtest?url={{encodeURIComponent($json.url)}}&strategy=mobile&key={{$env.GOOGLE_CUSTOM_SEARCH_KEY}}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "pagespeed-check",
+      "name": "PageSpeed Insights",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const url = $('Batch URLs').item.json;\nconst psi = $input.item.json;\n\nconst lhr = psi.lighthouseResult || {};\nconst categories = lhr.categories || {};\nconst audits = lhr.audits || {};\n\nconst perfScore = (categories.performance?.score || 0) * 100;\nconst lcp = audits['largest-contentful-paint']?.numericValue || null;\nconst fid = audits['max-potential-fid']?.numericValue || null;\nconst cls = audits['cumulative-layout-shift']?.numericValue || null;\nconst ttfb = audits['server-response-time']?.numericValue || null;\n\nconst issues = [];\nif (perfScore < 50) issues.push({ type: 'slow_page', severity: 'critical', desc: `Performance score ${perfScore}/100` });\nelse if (perfScore < 90) issues.push({ type: 'slow_page', severity: 'warning', desc: `Performance score ${perfScore}/100` });\nif (lcp && lcp > 4000) issues.push({ type: 'high_lcp', severity: 'critical', desc: `LCP ${(lcp/1000).toFixed(1)}s exceeds 4s threshold` });\nif (cls && cls > 0.25) issues.push({ type: 'high_cls', severity: 'warning', desc: `CLS ${cls.toFixed(3)} exceeds 0.25 threshold` });\n\nreturn [{ json: { ...url, perfScore, lcp, fid, cls, ttfb, issues } }];"
+      },
+      "id": "parse-results",
+      "name": "Parse Speed Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO pages (client_id, url, page_type, status_code) VALUES ('{{$json.client_id}}', '{{$json.url}}', 'other', 200) ON CONFLICT (client_id, url) DO UPDATE SET updated_at = now() RETURNING id"
+      },
+      "id": "upsert-page",
+      "name": "Upsert Page",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1780, 200],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO page_speed_scores (page_id, performance_score, lcp, fid, cls, ttfb, device) SELECT id, {{$json.perfScore}}, {{$json.lcp}}, {{$json.fid}}, {{$json.cls}}, {{$json.ttfb}}, 'mobile' FROM pages WHERE client_id = '{{$json.client_id}}' AND url = '{{$json.url}}'"
+      },
+      "id": "insert-speed",
+      "name": "Insert Speed Score",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1780, 400],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO agent_action_log (client_id, module, action_type, summary, status, triggered_by) VALUES ('{{$json.client_id}}', 'technical', 'audit_complete', 'Audited {{$json.url}} - Performance: {{$json.perfScore}}/100', 'success', 'n8n-technical-audit')"
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [2000, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    }
+  ],
+  "connections": {
+    "Audit Webhook": { "main": [[{ "node": "Fetch Client", "type": "main", "index": 0 }]] },
+    "Fetch Client": { "main": [[{ "node": "Fetch Sitemap", "type": "main", "index": 0 }]] },
+    "Fetch Sitemap": { "main": [[{ "node": "Parse Sitemap URLs", "type": "main", "index": 0 }]] },
+    "Parse Sitemap URLs": { "main": [[{ "node": "Batch URLs", "type": "main", "index": 0 }]] },
+    "Batch URLs": { "main": [[{ "node": "PageSpeed Insights", "type": "main", "index": 0 }]] },
+    "PageSpeed Insights": { "main": [[{ "node": "Parse Speed Results", "type": "main", "index": 0 }]] },
+    "Parse Speed Results": { "main": [[{ "node": "Upsert Page", "type": "main", "index": 0 }, { "node": "Insert Speed Score", "type": "main", "index": 0 }]] },
+    "Upsert Page": { "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "NEXUS-SEO" }]
+}

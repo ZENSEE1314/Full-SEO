@@ -1,0 +1,104 @@
+{
+  "name": "NEXUS - Daily Rank Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "triggerAtHour": 6 }]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 6AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT k.id, k.keyword, k.client_id, c.domain FROM keywords k JOIN clients c ON k.client_id = c.id WHERE k.is_tracked = true AND c.status = 'active' LIMIT 500"
+      },
+      "id": "fetch-keywords",
+      "name": "Fetch Tracked Keywords",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [460, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": { "batchSize": 10, "options": {} },
+      "id": "batch-keywords",
+      "name": "Batch Keywords",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/customsearch/v1?key={{$env.GOOGLE_CUSTOM_SEARCH_KEY}}&cx={{$env.GOOGLE_CUSTOM_SEARCH_CX}}&q={{encodeURIComponent($json.keyword)}}&num=10",
+        "options": {}
+      },
+      "id": "serp-check",
+      "name": "Google Custom Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const keyword = $('Batch Keywords').item.json;\nconst searchResults = $input.item.json;\nconst items = searchResults.items || [];\n\nlet rank = null;\nlet rankUrl = null;\n\nfor (let i = 0; i < items.length; i++) {\n  const link = items[i].link || '';\n  if (link.includes(keyword.domain)) {\n    rank = i + 1;\n    rankUrl = link;\n    break;\n  }\n}\n\nreturn [{\n  json: {\n    keyword_id: keyword.id,\n    keyword: keyword.keyword,\n    client_id: keyword.client_id,\n    domain: keyword.domain,\n    rank: rank,\n    url: rankUrl,\n    serp_features: items.slice(0, 3).map(i => i.link)\n  }\n}];"
+      },
+      "id": "parse-rank",
+      "name": "Parse Rank Position",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE keywords SET previous_rank = current_rank, current_rank = {{$json.rank}}, ranking_url = '{{$json.url}}', best_rank = LEAST(COALESCE(best_rank, 999), COALESCE({{$json.rank}}, 999)), updated_at = now() WHERE id = '{{$json.keyword_id}}'"
+      },
+      "id": "update-rank",
+      "name": "Update Keyword Rank",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1340, 200],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO keyword_rank_history (keyword_id, rank, url, recorded_at) VALUES ('{{$json.keyword_id}}', {{$json.rank}}, '{{$json.url}}', CURRENT_DATE) ON CONFLICT (keyword_id, recorded_at) DO UPDATE SET rank = EXCLUDED.rank, url = EXCLUDED.url"
+      },
+      "id": "insert-history",
+      "name": "Insert Rank History",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1340, 400],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO agent_action_log (module, action_type, summary, status, triggered_by) VALUES ('intelligence', 'rank_check', 'Checked rank for \"{{$json.keyword}}\" - Position: {{$json.rank || \"Not found\"}}', 'success', 'n8n-rank-tracker')"
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1560, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    }
+  ],
+  "connections": {
+    "Daily 6AM": { "main": [[{ "node": "Fetch Tracked Keywords", "type": "main", "index": 0 }]] },
+    "Fetch Tracked Keywords": { "main": [[{ "node": "Batch Keywords", "type": "main", "index": 0 }]] },
+    "Batch Keywords": { "main": [[{ "node": "Google Custom Search", "type": "main", "index": 0 }]] },
+    "Google Custom Search": { "main": [[{ "node": "Parse Rank Position", "type": "main", "index": 0 }]] },
+    "Parse Rank Position": { "main": [[{ "node": "Update Keyword Rank", "type": "main", "index": 0 }, { "node": "Insert Rank History", "type": "main", "index": 0 }]] },
+    "Update Keyword Rank": { "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "NEXUS-SEO" }]
+}

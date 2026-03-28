@@ -1,0 +1,105 @@
+{
+  "name": "NEXUS - Content Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "content-generator",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Content Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "content-generator"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT cb.*, k.keyword as target_keyword, k.search_volume, c.domain, c.name as client_name FROM content_briefs cb LEFT JOIN keywords k ON cb.target_keyword_id = k.id JOIN clients c ON cb.client_id = c.id WHERE cb.id = '{{$json.body.briefId}}'"
+      },
+      "id": "fetch-brief",
+      "name": "Fetch Brief",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [460, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE content_briefs SET status = 'in_progress', updated_at = now() WHERE id = '{{$json.body.briefId}}'"
+      },
+      "id": "update-status",
+      "name": "Mark In Progress",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [680, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an expert SEO content writer. Write a comprehensive, engaging, SEO-optimized article based on this brief:\n\nTitle: {{$node['Fetch Brief'].json[0].title}}\nTarget Keyword: {{$node['Fetch Brief'].json[0].target_keyword}}\nSecondary Keywords: {{$node['Fetch Brief'].json[0].secondary_keywords}}\nOutline: {{$node['Fetch Brief'].json[0].outline}}\nBrief: {{$node['Fetch Brief'].json[0].brief_text}}\nClient Domain: {{$node['Fetch Brief'].json[0].domain}}\n\nRequirements:\n- 1500-2500 words\n- Include target keyword in H1, first paragraph, and naturally throughout\n- Use secondary keywords in H2 headers\n- Include meta title (under 60 chars) and meta description (under 160 chars)\n- Write engaging, human-sounding content\n- Include a compelling introduction and conclusion\n- Use short paragraphs and bullet points for readability\n\nRespond in JSON format:\n{\n  \"title\": \"...\",\n  \"meta_title\": \"...\",\n  \"meta_description\": \"...\",\n  \"slug\": \"...\",\n  \"body\": \"...markdown content...\",\n  \"word_count\": number,\n  \"seo_score\": number (0-100)\n}"
+            }
+          ]
+        },
+        "options": { "temperature": 0.7, "maxTokens": 4000 }
+      },
+      "id": "generate-article",
+      "name": "Generate Article (OpenAI)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [900, 300],
+      "credentials": { "openAiApi": { "id": "CONFIGURE_ME", "name": "OpenAI" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const brief = $('Fetch Brief').item.json[0];\nconst response = $input.item.json;\n\nlet article;\ntry {\n  article = typeof response.text === 'string' ? JSON.parse(response.text) : response;\n} catch (e) {\n  article = {\n    title: brief.title,\n    meta_title: brief.title.substring(0, 60),\n    meta_description: (brief.brief_text || '').substring(0, 160),\n    slug: brief.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),\n    body: response.text || '',\n    word_count: (response.text || '').split(/\\s+/).length,\n    seo_score: 65\n  };\n}\n\nreturn [{\n  json: {\n    ...article,\n    brief_id: brief.id,\n    client_id: brief.client_id\n  }\n}];"
+      },
+      "id": "parse-article",
+      "name": "Parse Article",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO content_articles (brief_id, client_id, title, slug, body, meta_title, meta_description, word_count, seo_score, status, llm_model) VALUES ('{{$json.brief_id}}', '{{$json.client_id}}', '{{$json.title}}', '{{$json.slug}}', '{{$json.body}}', '{{$json.meta_title}}', '{{$json.meta_description}}', {{$json.word_count}}, {{$json.seo_score}}, 'review', 'gpt-4o') RETURNING id"
+      },
+      "id": "save-article",
+      "name": "Save Article",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1340, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO agent_action_log (client_id, module, action_type, summary, details, status, triggered_by) VALUES ('{{$json.client_id}}', 'content', 'article_generated', 'Generated article: \"{{$json.title}}\" ({{$json.word_count}} words, SEO score: {{$json.seo_score}})', '{\"brief_id\": \"{{$json.brief_id}}\", \"word_count\": {{$json.word_count}}, \"seo_score\": {{$json.seo_score}}}', 'success', 'n8n-content-generator')"
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1560, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    }
+  ],
+  "connections": {
+    "Content Webhook": { "main": [[{ "node": "Fetch Brief", "type": "main", "index": 0 }]] },
+    "Fetch Brief": { "main": [[{ "node": "Mark In Progress", "type": "main", "index": 0 }]] },
+    "Mark In Progress": { "main": [[{ "node": "Generate Article (OpenAI)", "type": "main", "index": 0 }]] },
+    "Generate Article (OpenAI)": { "main": [[{ "node": "Parse Article", "type": "main", "index": 0 }]] },
+    "Parse Article": { "main": [[{ "node": "Save Article", "type": "main", "index": 0 }]] },
+    "Save Article": { "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "NEXUS-SEO" }]
+}
