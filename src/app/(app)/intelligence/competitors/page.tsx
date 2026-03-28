@@ -13,31 +13,40 @@ export default async function CompetitorsPage() {
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const [competitorsResult, clientsResult] = await Promise.all([
-    sql`
-      SELECT comp.*, c.name as client_name,
-             COUNT(cr.id)::int as tracked_keywords
-      FROM competitors comp
-      JOIN clients c ON comp.client_id = c.id
-      LEFT JOIN competitor_ranks cr ON cr.competitor_id = comp.id
-      WHERE c.org_id = ${session.orgId}
-      GROUP BY comp.id, c.name
-      ORDER BY comp.domain
-    `,
-    sql`
-      SELECT id, name FROM clients
-      WHERE org_id = ${session.orgId}
-      ORDER BY name
-    `,
-  ]);
-
-  const competitors = competitorsResult as unknown as Array<
+  let competitors: Array<
     Competitor & { client_name: string; tracked_keywords: number }
-  >;
-  const clients = clientsResult as unknown as Array<{
-    id: string;
-    name: string;
-  }>;
+  > = [];
+  let clients: Array<{ id: string; name: string }> = [];
+  try {
+    const [competitorsResult, clientsResult] = await Promise.all([
+      sql`
+        SELECT comp.*, c.name as client_name,
+               COUNT(cr.id)::int as tracked_keywords
+        FROM competitors comp
+        JOIN clients c ON comp.client_id = c.id
+        LEFT JOIN competitor_ranks cr ON cr.competitor_id = comp.id
+        WHERE c.org_id = ${session.orgId}
+        GROUP BY comp.id, c.name
+        ORDER BY comp.domain
+      `,
+      sql`
+        SELECT id, name FROM clients
+        WHERE org_id = ${session.orgId}
+        ORDER BY name
+      `,
+    ]);
+
+    competitors = competitorsResult as unknown as Array<
+      Competitor & { client_name: string; tracked_keywords: number }
+    >;
+    clients = clientsResult as unknown as Array<{
+      id: string;
+      name: string;
+    }>;
+  } catch {
+    competitors = [];
+    clients = [];
+  }
 
   return (
     <div className="min-h-screen bg-background">

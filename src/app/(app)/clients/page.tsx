@@ -34,30 +34,35 @@ export default async function ClientsPage({ searchParams }: PageProps) {
   const statusFilter = params.status ?? "all";
   const searchQuery = params.q ?? "";
 
-  const clients = (await sql`
-    SELECT
-      c.id,
-      c.name,
-      c.domain,
-      c.status,
-      c.health_score,
-      COUNT(DISTINCT k.id) FILTER (WHERE k.is_tracked = true) AS keyword_count,
-      COUNT(DISTINCT p.id) AS page_count,
-      COUNT(DISTINCT ti.id) FILTER (WHERE ti.fixed_at IS NULL) AS issue_count
-    FROM clients c
-    LEFT JOIN keywords k ON k.client_id = c.id
-    LEFT JOIN pages p ON p.client_id = c.id
-    LEFT JOIN technical_issues ti ON ti.client_id = c.id
-    WHERE c.org_id = ${session.orgId}
-      AND (${statusFilter} = 'all' OR c.status = ${statusFilter})
-      AND (
-        ${searchQuery} = '' OR
-        c.name ILIKE ${"%" + searchQuery + "%"} OR
-        c.domain ILIKE ${"%" + searchQuery + "%"}
-      )
-    GROUP BY c.id
-    ORDER BY c.name
-  `) as unknown as ClientRow[];
+  let clients: ClientRow[] = [];
+  try {
+    clients = (await sql`
+      SELECT
+        c.id,
+        c.name,
+        c.domain,
+        c.status,
+        c.health_score,
+        COUNT(DISTINCT k.id) FILTER (WHERE k.is_tracked = true) AS keyword_count,
+        COUNT(DISTINCT p.id) AS page_count,
+        COUNT(DISTINCT ti.id) FILTER (WHERE ti.fixed_at IS NULL) AS issue_count
+      FROM clients c
+      LEFT JOIN keywords k ON k.client_id = c.id
+      LEFT JOIN pages p ON p.client_id = c.id
+      LEFT JOIN technical_issues ti ON ti.client_id = c.id
+      WHERE c.org_id = ${session.orgId}
+        AND (${statusFilter} = 'all' OR c.status = ${statusFilter})
+        AND (
+          ${searchQuery} = '' OR
+          c.name ILIKE ${"%" + searchQuery + "%"} OR
+          c.domain ILIKE ${"%" + searchQuery + "%"}
+        )
+      GROUP BY c.id
+      ORDER BY c.name
+    `) as unknown as ClientRow[];
+  } catch {
+    clients = [];
+  }
 
   return (
     <div className="min-h-screen bg-background">

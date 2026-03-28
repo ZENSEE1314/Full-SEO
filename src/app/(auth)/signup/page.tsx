@@ -70,17 +70,25 @@ async function signupAction(
 
 export default function SignupPage() {
   return (
-    <div className="rounded-xl border border-white/10 bg-slate-900/70 p-8 shadow-2xl shadow-black/40 backdrop-blur-xl">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-white">Create your account</h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Start optimizing your SEO performance today.
+    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-8 shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_20px_50px_-12px_rgba(0,0,0,0.5)] backdrop-blur-2xl sm:p-10">
+      {/* Inner glow */}
+      <div
+        className="pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
+        aria-hidden="true"
+      />
+
+      <div className="mb-8">
+        <h1 className="font-display text-2xl font-bold tracking-tight text-white">
+          Create your account
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-slate-500">
+          Start dominating search results
         </p>
       </div>
 
       <SignupForm action={signupAction} />
 
-      <p className="mt-6 text-center text-sm text-slate-400">
+      <p className="mt-8 text-center text-sm text-slate-500">
         Already have an account?{" "}
         <Link
           href="/login"

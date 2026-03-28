@@ -18,14 +18,18 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const clientRows = await sql`
-    SELECT id, name, domain, status, health_score
-    FROM clients
-    WHERE org_id = ${session.orgId}
-    ORDER BY name
-  `;
-
-  const clients = clientRows as unknown as Client[];
+  let clients: Client[] = [];
+  try {
+    const clientRows = await sql`
+      SELECT id, name, domain, status, health_score
+      FROM clients
+      WHERE org_id = ${session.orgId}
+      ORDER BY name
+    `;
+    clients = clientRows as unknown as Client[];
+  } catch {
+    clients = [];
+  }
 
   return (
     <AppProvider

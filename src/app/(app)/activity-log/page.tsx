@@ -55,11 +55,17 @@ export default async function ActivityLogPage({
 
   query += ` ORDER BY aal.created_at DESC LIMIT 100`;
 
-  const actions = (await sql.query(query, values)) as unknown as AgentAction[];
-
-  const clients = await sql`
-    SELECT id, name FROM clients WHERE org_id = ${session.orgId} ORDER BY name
-  `;
+  let actions: AgentAction[] = [];
+  let clients: Array<{ id: string; name: string }> = [];
+  try {
+    actions = (await sql.query(query, values)) as unknown as AgentAction[];
+    clients = (await sql`
+      SELECT id, name FROM clients WHERE org_id = ${session.orgId} ORDER BY name
+    `) as unknown as Array<{ id: string; name: string }>;
+  } catch {
+    actions = [];
+    clients = [];
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -85,7 +91,7 @@ export default async function ActivityLogPage({
           currentModule={moduleFilter}
           currentStatus={statusFilter}
           currentClientId={clientFilter}
-          clients={clients as unknown as Array<{ id: string; name: string }>}
+          clients={clients}
         />
 
         <ActionFeed

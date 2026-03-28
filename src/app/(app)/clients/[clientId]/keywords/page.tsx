@@ -28,25 +28,30 @@ export default async function KeywordsPage({
 
   const { clientId } = await params;
 
-  const [clientRows, keywordRows] = await Promise.all([
-    sql`
-      SELECT id, name FROM clients
-      WHERE id = ${clientId} AND org_id = ${session.orgId}
-    `,
-    sql`
-      SELECT
-        k.id, k.keyword, k.search_volume, k.difficulty,
-        k.current_rank, k.previous_rank, k.best_rank,
-        k.ranking_url, k.is_tracked, k.source, k.tags
-      FROM keywords k
-      WHERE k.client_id = ${clientId} AND k.is_tracked = true
-      ORDER BY k.search_volume DESC NULLS LAST
-    `,
-  ]);
+  let keywords: Keyword[] = [];
+  try {
+    const [clientRows, keywordRows] = await Promise.all([
+      sql`
+        SELECT id, name FROM clients
+        WHERE id = ${clientId} AND org_id = ${session.orgId}
+      `,
+      sql`
+        SELECT
+          k.id, k.keyword, k.search_volume, k.difficulty,
+          k.current_rank, k.previous_rank, k.best_rank,
+          k.ranking_url, k.is_tracked, k.source, k.tags
+        FROM keywords k
+        WHERE k.client_id = ${clientId} AND k.is_tracked = true
+        ORDER BY k.search_volume DESC NULLS LAST
+      `,
+    ]);
 
-  if (clientRows.length === 0) notFound();
+    if (clientRows.length === 0) notFound();
 
-  const keywords = keywordRows as unknown as Keyword[];
+    keywords = keywordRows as unknown as Keyword[];
+  } catch {
+    notFound();
+  }
 
   return (
     <div className="min-h-screen bg-background">

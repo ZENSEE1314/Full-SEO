@@ -56,58 +56,75 @@ export default async function ClientOverviewPage({
 
   const { clientId } = await params;
 
-  const [clientRows, topKeywordsRows, recentIssuesRows, recentActionsRows] =
-    await Promise.all([
-      sql`
-        SELECT
-          c.id, c.name, c.domain, c.status, c.health_score, c.created_at,
-          COUNT(DISTINCT k.id) FILTER (WHERE k.is_tracked = true) AS keyword_count,
-          COUNT(DISTINCT p.id) AS page_count,
-          COUNT(DISTINCT ti.id) FILTER (WHERE ti.fixed_at IS NULL) AS issue_count
-        FROM clients c
-        LEFT JOIN keywords k ON k.client_id = c.id
-        LEFT JOIN pages p ON p.client_id = c.id
-        LEFT JOIN technical_issues ti ON ti.client_id = c.id
-        WHERE c.id = ${clientId} AND c.org_id = ${session.orgId}
-        GROUP BY c.id
-      `,
-      sql`
-        SELECT id, keyword, current_rank, previous_rank, search_volume, ranking_url
-        FROM keywords
-        WHERE client_id = ${clientId} AND is_tracked = true AND current_rank IS NOT NULL
-        ORDER BY search_volume DESC NULLS LAST
-        LIMIT 10
-      `,
-      sql`
-        SELECT id, issue_type, severity, description, detected_at
-        FROM technical_issues
-        WHERE client_id = ${clientId} AND fixed_at IS NULL
-        ORDER BY
-          CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
-          detected_at DESC
-        LIMIT 8
-      `,
-      sql`
-        SELECT id, module, action_type, summary, status, created_at
-        FROM agent_action_log
-        WHERE client_id = ${clientId}
-        ORDER BY created_at DESC
-        LIMIT 10
-      `,
-    ]);
-
-  if (clientRows.length === 0) notFound();
-
-  const client = clientRows[0] as unknown as ClientDetail;
-  const topKeywords = topKeywordsRows as unknown as Keyword[];
-  const recentIssues = recentIssuesRows as unknown as Array<{
+  let client: ClientDetail | null = null;
+  let topKeywords: Keyword[] = [];
+  let recentIssues: Array<{
     id: string;
     issue_type: string;
     severity: "critical" | "warning" | "info";
     description: string | null;
     detected_at: string;
-  }>;
-  const recentActions = recentActionsRows as unknown as AgentAction[];
+  }> = [];
+  let recentActions: AgentAction[] = [];
+
+  try {
+    const [clientRows, topKeywordsRows, recentIssuesRows, recentActionsRows] =
+      await Promise.all([
+        sql`
+          SELECT
+            c.id, c.name, c.domain, c.status, c.health_score, c.created_at,
+            COUNT(DISTINCT k.id) FILTER (WHERE k.is_tracked = true) AS keyword_count,
+            COUNT(DISTINCT p.id) AS page_count,
+            COUNT(DISTINCT ti.id) FILTER (WHERE ti.fixed_at IS NULL) AS issue_count
+          FROM clients c
+          LEFT JOIN keywords k ON k.client_id = c.id
+          LEFT JOIN pages p ON p.client_id = c.id
+          LEFT JOIN technical_issues ti ON ti.client_id = c.id
+          WHERE c.id = ${clientId} AND c.org_id = ${session.orgId}
+          GROUP BY c.id
+        `,
+        sql`
+          SELECT id, keyword, current_rank, previous_rank, search_volume, ranking_url
+          FROM keywords
+          WHERE client_id = ${clientId} AND is_tracked = true AND current_rank IS NOT NULL
+          ORDER BY search_volume DESC NULLS LAST
+          LIMIT 10
+        `,
+        sql`
+          SELECT id, issue_type, severity, description, detected_at
+          FROM technical_issues
+          WHERE client_id = ${clientId} AND fixed_at IS NULL
+          ORDER BY
+            CASE severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
+            detected_at DESC
+          LIMIT 8
+        `,
+        sql`
+          SELECT id, module, action_type, summary, status, created_at
+          FROM agent_action_log
+          WHERE client_id = ${clientId}
+          ORDER BY created_at DESC
+          LIMIT 10
+        `,
+      ]);
+
+    if (clientRows.length === 0) notFound();
+
+    client = clientRows[0] as unknown as ClientDetail;
+    topKeywords = topKeywordsRows as unknown as Keyword[];
+    recentIssues = recentIssuesRows as unknown as Array<{
+      id: string;
+      issue_type: string;
+      severity: "critical" | "warning" | "info";
+      description: string | null;
+      detected_at: string;
+    }>;
+    recentActions = recentActionsRows as unknown as AgentAction[];
+  } catch {
+    notFound();
+  }
+
+  if (!client) notFound();
 
   return (
     <div className="min-h-screen bg-background">

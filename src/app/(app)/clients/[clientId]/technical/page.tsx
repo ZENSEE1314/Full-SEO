@@ -84,149 +84,164 @@ export default async function TechnicalPage({
 
   const { clientId } = await params;
 
-  const [clientRows] = await Promise.all([
-    sql`
-      SELECT id, name FROM clients
-      WHERE id = ${clientId} AND org_id = ${session.orgId}
-    `,
-  ]);
+  let vitals: VitalsAvg = { avg_lcp: null, avg_fid: null, avg_cls: null, avg_ttfb: null };
+  let vitalsHistory = { lcp: [] as number[], fid: [] as number[], cls: [] as number[], ttfb: [] as number[] };
+  let issueCounts: IssueSeverityCount[] = [];
+  let totalIssues = 0;
+  let pages: PageRow[] = [];
+  let issues: IssueRow[] = [];
+  let speedHistory: SpeedRecord[] = [];
+  let schemas: SchemaRow[] = [];
 
-  if (clientRows.length === 0) notFound();
+  try {
+    const [clientRows] = await Promise.all([
+      sql`
+        SELECT id, name FROM clients
+        WHERE id = ${clientId} AND org_id = ${session.orgId}
+      `,
+    ]);
 
-  const client = clientRows[0] as { id: string; name: string };
+    if (clientRows.length === 0) notFound();
+  } catch {
+    notFound();
+  }
 
-  const [
-    vitalsRows,
-    issueCountRows,
-    pagesRows,
-    issuesRows,
-    speedHistoryRows,
-    schemaRows,
-    vitalsHistoryRows,
-  ] = await Promise.all([
-    sql`
-      SELECT
-        AVG(pss.lcp) AS avg_lcp,
-        AVG(pss.fid) AS avg_fid,
-        AVG(pss.cls) AS avg_cls,
-        AVG(pss.ttfb) AS avg_ttfb
-      FROM page_speed_scores pss
-      JOIN pages p ON p.id = pss.page_id
-      WHERE p.client_id = ${clientId}
-        AND pss.recorded_at >= NOW() - INTERVAL '30 days'
-    `,
-    sql`
-      SELECT severity, COUNT(*)::int AS count
-      FROM technical_issues
-      WHERE client_id = ${clientId} AND fixed_at IS NULL
-      GROUP BY severity
-    `,
-    sql`
-      SELECT
-        p.id,
-        p.url,
-        p.title,
-        p.status_code,
-        p.is_indexed,
-        p.page_type,
-        COALESCE(
-          (SELECT pss.performance_score
-           FROM page_speed_scores pss
-           WHERE pss.page_id = p.id
-           ORDER BY pss.recorded_at DESC
-           LIMIT 1),
-          NULL
-        ) AS speed_score,
-        COALESCE(
-          (SELECT COUNT(*)
-           FROM technical_issues ti
-           WHERE ti.page_id = p.id AND ti.fixed_at IS NULL),
-          0
-        )::int AS issue_count
-      FROM pages p
-      WHERE p.client_id = ${clientId}
-      ORDER BY p.url ASC
-    `,
-    sql`
-      SELECT
-        ti.id,
-        ti.issue_type,
-        ti.severity,
-        ti.description,
-        ti.auto_fixable,
-        ti.fixed_at,
-        ti.detected_at,
-        p.url AS page_url
-      FROM technical_issues ti
-      LEFT JOIN pages p ON p.id = ti.page_id
-      WHERE ti.client_id = ${clientId} AND ti.fixed_at IS NULL
-      ORDER BY
-        CASE ti.severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
-        ti.detected_at DESC
-    `,
-    sql`
-      SELECT
-        pss.recorded_at,
-        pss.performance_score,
-        pss.lcp,
-        pss.fid,
-        pss.cls,
-        pss.ttfb,
-        pss.device
-      FROM page_speed_scores pss
-      JOIN pages p ON p.id = pss.page_id
-      WHERE p.client_id = ${clientId}
-      ORDER BY pss.recorded_at ASC
-    `,
-    sql`
-      SELECT
-        sm.id,
-        p.url AS page_url,
-        sm.schema_type,
-        sm.json_ld,
-        sm.is_valid,
-        COALESCE(sm.errors, '{}') AS errors
-      FROM schema_markups sm
-      JOIN pages p ON p.id = sm.page_id
-      WHERE p.client_id = ${clientId}
-      ORDER BY sm.schema_type ASC
-    `,
-    sql`
-      SELECT
-        pss.lcp,
-        pss.fid,
-        pss.cls,
-        pss.ttfb,
-        pss.recorded_at
-      FROM page_speed_scores pss
-      JOIN pages p ON p.id = pss.page_id
-      WHERE p.client_id = ${clientId}
-        AND pss.recorded_at >= NOW() - INTERVAL '30 days'
-      ORDER BY pss.recorded_at ASC
-      LIMIT 30
-    `,
-  ]);
+  try {
+    const [
+      vitalsRows,
+      issueCountRows,
+      pagesRows,
+      issuesRows,
+      speedHistoryRows,
+      schemaRows,
+      vitalsHistoryRows,
+    ] = await Promise.all([
+      sql`
+        SELECT
+          AVG(pss.lcp) AS avg_lcp,
+          AVG(pss.fid) AS avg_fid,
+          AVG(pss.cls) AS avg_cls,
+          AVG(pss.ttfb) AS avg_ttfb
+        FROM page_speed_scores pss
+        JOIN pages p ON p.id = pss.page_id
+        WHERE p.client_id = ${clientId}
+          AND pss.recorded_at >= NOW() - INTERVAL '30 days'
+      `,
+      sql`
+        SELECT severity, COUNT(*)::int AS count
+        FROM technical_issues
+        WHERE client_id = ${clientId} AND fixed_at IS NULL
+        GROUP BY severity
+      `,
+      sql`
+        SELECT
+          p.id,
+          p.url,
+          p.title,
+          p.status_code,
+          p.is_indexed,
+          p.page_type,
+          COALESCE(
+            (SELECT pss.performance_score
+             FROM page_speed_scores pss
+             WHERE pss.page_id = p.id
+             ORDER BY pss.recorded_at DESC
+             LIMIT 1),
+            NULL
+          ) AS speed_score,
+          COALESCE(
+            (SELECT COUNT(*)
+             FROM technical_issues ti
+             WHERE ti.page_id = p.id AND ti.fixed_at IS NULL),
+            0
+          )::int AS issue_count
+        FROM pages p
+        WHERE p.client_id = ${clientId}
+        ORDER BY p.url ASC
+      `,
+      sql`
+        SELECT
+          ti.id,
+          ti.issue_type,
+          ti.severity,
+          ti.description,
+          ti.auto_fixable,
+          ti.fixed_at,
+          ti.detected_at,
+          p.url AS page_url
+        FROM technical_issues ti
+        LEFT JOIN pages p ON p.id = ti.page_id
+        WHERE ti.client_id = ${clientId} AND ti.fixed_at IS NULL
+        ORDER BY
+          CASE ti.severity WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
+          ti.detected_at DESC
+      `,
+      sql`
+        SELECT
+          pss.recorded_at,
+          pss.performance_score,
+          pss.lcp,
+          pss.fid,
+          pss.cls,
+          pss.ttfb,
+          pss.device
+        FROM page_speed_scores pss
+        JOIN pages p ON p.id = pss.page_id
+        WHERE p.client_id = ${clientId}
+        ORDER BY pss.recorded_at ASC
+      `,
+      sql`
+        SELECT
+          sm.id,
+          p.url AS page_url,
+          sm.schema_type,
+          sm.json_ld,
+          sm.is_valid,
+          COALESCE(sm.errors, '{}') AS errors
+        FROM schema_markups sm
+        JOIN pages p ON p.id = sm.page_id
+        WHERE p.client_id = ${clientId}
+        ORDER BY sm.schema_type ASC
+      `,
+      sql`
+        SELECT
+          pss.lcp,
+          pss.fid,
+          pss.cls,
+          pss.ttfb,
+          pss.recorded_at
+        FROM page_speed_scores pss
+        JOIN pages p ON p.id = pss.page_id
+        WHERE p.client_id = ${clientId}
+          AND pss.recorded_at >= NOW() - INTERVAL '30 days'
+        ORDER BY pss.recorded_at ASC
+        LIMIT 30
+      `,
+    ]);
 
-  const vitals = (vitalsRows[0] as VitalsAvg | undefined) ?? {
-    avg_lcp: null,
-    avg_fid: null,
-    avg_cls: null,
-    avg_ttfb: null,
-  };
+    vitals = (vitalsRows[0] as VitalsAvg | undefined) ?? {
+      avg_lcp: null,
+      avg_fid: null,
+      avg_cls: null,
+      avg_ttfb: null,
+    };
 
-  const vitalsHistory = {
-    lcp: vitalsHistoryRows.map((r) => (r as { lcp: number | null }).lcp).filter((v): v is number => v !== null),
-    fid: vitalsHistoryRows.map((r) => (r as { fid: number | null }).fid).filter((v): v is number => v !== null),
-    cls: vitalsHistoryRows.map((r) => (r as { cls: number | null }).cls).filter((v): v is number => v !== null),
-    ttfb: vitalsHistoryRows.map((r) => (r as { ttfb: number | null }).ttfb).filter((v): v is number => v !== null),
-  };
+    vitalsHistory = {
+      lcp: vitalsHistoryRows.map((r) => (r as { lcp: number | null }).lcp).filter((v): v is number => v !== null),
+      fid: vitalsHistoryRows.map((r) => (r as { fid: number | null }).fid).filter((v): v is number => v !== null),
+      cls: vitalsHistoryRows.map((r) => (r as { cls: number | null }).cls).filter((v): v is number => v !== null),
+      ttfb: vitalsHistoryRows.map((r) => (r as { ttfb: number | null }).ttfb).filter((v): v is number => v !== null),
+    };
 
-  const issueCounts = issueCountRows as unknown as IssueSeverityCount[];
-  const totalIssues = issueCounts.reduce((sum, r) => sum + Number(r.count), 0);
-  const pages = pagesRows as unknown as PageRow[];
-  const issues = issuesRows as unknown as IssueRow[];
-  const speedHistory = speedHistoryRows as unknown as SpeedRecord[];
-  const schemas = schemaRows as unknown as SchemaRow[];
+    issueCounts = issueCountRows as unknown as IssueSeverityCount[];
+    totalIssues = issueCounts.reduce((sum, r) => sum + Number(r.count), 0);
+    pages = pagesRows as unknown as PageRow[];
+    issues = issuesRows as unknown as IssueRow[];
+    speedHistory = speedHistoryRows as unknown as SpeedRecord[];
+    schemas = schemaRows as unknown as SchemaRow[];
+  } catch {
+    // Use default empty values
+  }
 
   return (
     <div className="min-h-screen bg-background">

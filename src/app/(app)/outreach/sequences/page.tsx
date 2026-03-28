@@ -25,39 +25,46 @@ export default async function SequencesPage() {
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const [sequenceRows, clientRows] = await Promise.all([
-    sql`
-      SELECT
-        os.*,
-        c.name as client_name,
-        COALESCE(stats.sent_count, 0) as sent_count,
-        COALESCE(stats.delivered_count, 0) as delivered_count,
-        COALESCE(stats.opened_count, 0) as opened_count,
-        COALESCE(stats.replied_count, 0) as replied_count
-      FROM outreach_sequences os
-      JOIN clients c ON os.client_id = c.id
-      LEFT JOIN LATERAL (
+  let sequences: SequenceWithStats[] = [];
+  let clients: Client[] = [];
+  try {
+    const [sequenceRows, clientRows] = await Promise.all([
+      sql`
         SELECT
-          COUNT(*) FILTER (WHERE status = 'sent') as sent_count,
-          COUNT(*) FILTER (WHERE status = 'delivered') as delivered_count,
-          COUNT(*) FILTER (WHERE status = 'opened') as opened_count,
-          COUNT(*) FILTER (WHERE status = 'replied') as replied_count
-        FROM outreach_messages om
-        WHERE om.sequence_id = os.id
-      ) stats ON true
-      WHERE c.org_id = ${session.orgId}
-      ORDER BY os.created_at DESC
-    `,
-    sql`
-      SELECT id, name, domain, status, health_score
-      FROM clients
-      WHERE org_id = ${session.orgId}
-      ORDER BY name
-    `,
-  ]);
+          os.*,
+          c.name as client_name,
+          COALESCE(stats.sent_count, 0) as sent_count,
+          COALESCE(stats.delivered_count, 0) as delivered_count,
+          COALESCE(stats.opened_count, 0) as opened_count,
+          COALESCE(stats.replied_count, 0) as replied_count
+        FROM outreach_sequences os
+        JOIN clients c ON os.client_id = c.id
+        LEFT JOIN LATERAL (
+          SELECT
+            COUNT(*) FILTER (WHERE status = 'sent') as sent_count,
+            COUNT(*) FILTER (WHERE status = 'delivered') as delivered_count,
+            COUNT(*) FILTER (WHERE status = 'opened') as opened_count,
+            COUNT(*) FILTER (WHERE status = 'replied') as replied_count
+          FROM outreach_messages om
+          WHERE om.sequence_id = os.id
+        ) stats ON true
+        WHERE c.org_id = ${session.orgId}
+        ORDER BY os.created_at DESC
+      `,
+      sql`
+        SELECT id, name, domain, status, health_score
+        FROM clients
+        WHERE org_id = ${session.orgId}
+        ORDER BY name
+      `,
+    ]);
 
-  const sequences = sequenceRows as unknown as SequenceWithStats[];
-  const clients = clientRows as unknown as Client[];
+    sequences = sequenceRows as unknown as SequenceWithStats[];
+    clients = clientRows as unknown as Client[];
+  } catch {
+    sequences = [];
+    clients = [];
+  }
 
   return (
     <div className="min-h-screen bg-background">

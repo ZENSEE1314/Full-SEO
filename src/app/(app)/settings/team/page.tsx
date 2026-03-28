@@ -21,27 +21,31 @@ export default async function TeamSettingsPage() {
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const memberRows = await sql`
-    SELECT
-      u.id,
-      u.name,
-      u.email,
-      om.role,
-      om.created_at
-    FROM org_members om
-    JOIN users u ON om.user_id = u.id
-    WHERE om.org_id = ${session.orgId}
-    ORDER BY
-      CASE om.role
-        WHEN 'owner' THEN 0
-        WHEN 'admin' THEN 1
-        WHEN 'member' THEN 2
-        WHEN 'viewer' THEN 3
-      END,
-      u.name
-  `;
-
-  const members = memberRows as unknown as TeamMember[];
+  let members: TeamMember[] = [];
+  try {
+    const memberRows = await sql`
+      SELECT
+        u.id,
+        u.name,
+        u.email,
+        om.role,
+        om.created_at
+      FROM org_members om
+      JOIN users u ON om.user_id = u.id
+      WHERE om.org_id = ${session.orgId}
+      ORDER BY
+        CASE om.role
+          WHEN 'owner' THEN 0
+          WHEN 'admin' THEN 1
+          WHEN 'member' THEN 2
+          WHEN 'viewer' THEN 3
+        END,
+        u.name
+    `;
+    members = memberRows as unknown as TeamMember[];
+  } catch {
+    members = [];
+  }
 
   return (
     <div className="min-h-screen bg-background">

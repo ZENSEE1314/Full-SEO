@@ -29,24 +29,32 @@ export default async function ClientSettingsPage({
 
   const { clientId } = await params;
 
-  const [clientRows, competitorRows] = await Promise.all([
-    sql`
-      SELECT id, name, domain, status, settings
-      FROM clients
-      WHERE id = ${clientId} AND org_id = ${session.orgId}
-    `,
-    sql`
-      SELECT id, domain, name, is_active, created_at
-      FROM competitors
-      WHERE client_id = ${clientId}
-      ORDER BY created_at
-    `,
-  ]);
+  let client: Client | null = null;
+  let competitors: Competitor[] = [];
+  try {
+    const [clientRows, competitorRows] = await Promise.all([
+      sql`
+        SELECT id, name, domain, status, settings
+        FROM clients
+        WHERE id = ${clientId} AND org_id = ${session.orgId}
+      `,
+      sql`
+        SELECT id, domain, name, is_active, created_at
+        FROM competitors
+        WHERE client_id = ${clientId}
+        ORDER BY created_at
+      `,
+    ]);
 
-  if (clientRows.length === 0) notFound();
+    if (clientRows.length === 0) notFound();
 
-  const client = clientRows[0] as unknown as Client;
-  const competitors = competitorRows as unknown as Competitor[];
+    client = clientRows[0] as unknown as Client;
+    competitors = competitorRows as unknown as Competitor[];
+  } catch {
+    notFound();
+  }
+
+  if (!client) notFound();
 
   return (
     <div className="min-h-screen bg-background">

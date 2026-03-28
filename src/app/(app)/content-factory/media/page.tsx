@@ -21,16 +21,20 @@ export default async function MediaPage() {
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const mediaResult = await sql`
-    SELECT cm.id, cm.url, cm.media_type as type, cm.alt_text, ca.title as article_title, cm.created_at
-    FROM content_media cm
-    LEFT JOIN content_articles ca ON cm.article_id = ca.id
-    JOIN clients c ON cm.client_id = c.id
-    WHERE c.org_id = ${session.orgId}
-    ORDER BY cm.created_at DESC
-  `;
-
-  const media = mediaResult as unknown as MediaRow[];
+  let media: MediaRow[] = [];
+  try {
+    const mediaResult = await sql`
+      SELECT cm.id, cm.url, cm.media_type as type, cm.alt_text, ca.title as article_title, cm.created_at
+      FROM content_media cm
+      LEFT JOIN content_articles ca ON cm.article_id = ca.id
+      JOIN clients c ON cm.client_id = c.id
+      WHERE c.org_id = ${session.orgId}
+      ORDER BY cm.created_at DESC
+    `;
+    media = mediaResult as unknown as MediaRow[];
+  } catch {
+    media = [];
+  }
 
   return (
     <div className="min-h-screen bg-background">

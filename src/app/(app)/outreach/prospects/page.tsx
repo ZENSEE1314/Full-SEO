@@ -21,23 +21,32 @@ export default async function ProspectsPage({ searchParams }: PageProps) {
   const statusFilter = params.status ?? "all";
   const clientFilter = params.client ?? "all";
 
-  const [prospects, clients] = await Promise.all([
-    sql`
-      SELECT bp.*
-      FROM backlink_prospects bp
-      JOIN clients c ON bp.client_id = c.id
-      WHERE c.org_id = ${session.orgId}
-        AND (${statusFilter} = 'all' OR bp.status = ${statusFilter})
-        AND (${clientFilter} = 'all' OR bp.client_id = ${clientFilter})
-      ORDER BY bp.created_at DESC
-    `,
-    sql`
-      SELECT id, name, domain, status, health_score
-      FROM clients
-      WHERE org_id = ${session.orgId}
-      ORDER BY name
-    `,
-  ]);
+  let prospects: unknown[] = [];
+  let clients: unknown[] = [];
+  try {
+    const [prospectsResult, clientsResult] = await Promise.all([
+      sql`
+        SELECT bp.*
+        FROM backlink_prospects bp
+        JOIN clients c ON bp.client_id = c.id
+        WHERE c.org_id = ${session.orgId}
+          AND (${statusFilter} = 'all' OR bp.status = ${statusFilter})
+          AND (${clientFilter} = 'all' OR bp.client_id = ${clientFilter})
+        ORDER BY bp.created_at DESC
+      `,
+      sql`
+        SELECT id, name, domain, status, health_score
+        FROM clients
+        WHERE org_id = ${session.orgId}
+        ORDER BY name
+      `,
+    ]);
+    prospects = prospectsResult;
+    clients = clientsResult;
+  } catch {
+    prospects = [];
+    clients = [];
+  }
 
   return (
     <div className="min-h-screen bg-background">

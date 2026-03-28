@@ -17,31 +17,43 @@ export default async function ArticlesPage() {
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const [articlesResult, briefsResult] = await Promise.all([
-    sql`
-      SELECT ca.*, c.name as client_name
-      FROM content_articles ca
-      JOIN clients c ON ca.client_id = c.id
-      WHERE c.org_id = ${session.orgId}
-      ORDER BY ca.updated_at DESC
-    `,
-    sql`
-      SELECT cb.id, cb.title, cb.client_id, c.name as client_name
-      FROM content_briefs cb
-      JOIN clients c ON cb.client_id = c.id
-      WHERE c.org_id = ${session.orgId}
-        AND cb.status IN ('approved', 'in_progress')
-      ORDER BY cb.title
-    `,
-  ]);
-
-  const articles = articlesResult as unknown as ArticleWithClient[];
-  const approvedBriefs = briefsResult as unknown as Array<{
+  let articles: ArticleWithClient[] = [];
+  let approvedBriefs: Array<{
     id: string;
     title: string;
     client_id: string;
     client_name: string;
-  }>;
+  }> = [];
+  try {
+    const [articlesResult, briefsResult] = await Promise.all([
+      sql`
+        SELECT ca.*, c.name as client_name
+        FROM content_articles ca
+        JOIN clients c ON ca.client_id = c.id
+        WHERE c.org_id = ${session.orgId}
+        ORDER BY ca.updated_at DESC
+      `,
+      sql`
+        SELECT cb.id, cb.title, cb.client_id, c.name as client_name
+        FROM content_briefs cb
+        JOIN clients c ON cb.client_id = c.id
+        WHERE c.org_id = ${session.orgId}
+          AND cb.status IN ('approved', 'in_progress')
+        ORDER BY cb.title
+      `,
+    ]);
+
+    articles = articlesResult as unknown as ArticleWithClient[];
+    approvedBriefs = briefsResult as unknown as Array<{
+      id: string;
+      title: string;
+      client_id: string;
+      client_name: string;
+    }>;
+  } catch {
+    articles = [];
+    approvedBriefs = [];
+  }
 
   return (
     <div className="min-h-screen bg-background">

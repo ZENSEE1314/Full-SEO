@@ -24,19 +24,12 @@ export default async function BriefsPage({
 
   const params = await searchParams;
 
-  const [briefsResult, clientsResult, keywordsResult] = await Promise.all([
-    params.client && params.status
-      ? sql`
-          SELECT cb.*, c.name as client_name, k.keyword as target_keyword
-          FROM content_briefs cb
-          JOIN clients c ON cb.client_id = c.id
-          LEFT JOIN keywords k ON cb.target_keyword_id = k.id
-          WHERE c.org_id = ${session.orgId}
-            AND cb.client_id = ${params.client}
-            AND cb.status = ${params.status}
-          ORDER BY cb.updated_at DESC
-        `
-      : params.client
+  let briefs: BriefWithRelations[] = [];
+  let clients: Pick<Client, "id" | "name">[] = [];
+  let keywords: Pick<Keyword, "id" | "keyword" | "client_id">[] = [];
+  try {
+    const [briefsResult, clientsResult, keywordsResult] = await Promise.all([
+      params.client && params.status
         ? sql`
             SELECT cb.*, c.name as client_name, k.keyword as target_keyword
             FROM content_briefs cb
@@ -44,43 +37,59 @@ export default async function BriefsPage({
             LEFT JOIN keywords k ON cb.target_keyword_id = k.id
             WHERE c.org_id = ${session.orgId}
               AND cb.client_id = ${params.client}
+              AND cb.status = ${params.status}
             ORDER BY cb.updated_at DESC
           `
-        : params.status
+        : params.client
           ? sql`
               SELECT cb.*, c.name as client_name, k.keyword as target_keyword
               FROM content_briefs cb
               JOIN clients c ON cb.client_id = c.id
               LEFT JOIN keywords k ON cb.target_keyword_id = k.id
               WHERE c.org_id = ${session.orgId}
-                AND cb.status = ${params.status}
+                AND cb.client_id = ${params.client}
               ORDER BY cb.updated_at DESC
             `
-          : sql`
-              SELECT cb.*, c.name as client_name, k.keyword as target_keyword
-              FROM content_briefs cb
-              JOIN clients c ON cb.client_id = c.id
-              LEFT JOIN keywords k ON cb.target_keyword_id = k.id
-              WHERE c.org_id = ${session.orgId}
-              ORDER BY cb.updated_at DESC
-            `,
-    sql`
-      SELECT id, name FROM clients
-      WHERE org_id = ${session.orgId} AND status = 'active'
-      ORDER BY name
-    `,
-    sql`
-      SELECT k.id, k.keyword, k.client_id
-      FROM keywords k
-      JOIN clients c ON k.client_id = c.id
-      WHERE c.org_id = ${session.orgId} AND k.is_tracked = true
-      ORDER BY k.keyword
-    `,
-  ]);
+          : params.status
+            ? sql`
+                SELECT cb.*, c.name as client_name, k.keyword as target_keyword
+                FROM content_briefs cb
+                JOIN clients c ON cb.client_id = c.id
+                LEFT JOIN keywords k ON cb.target_keyword_id = k.id
+                WHERE c.org_id = ${session.orgId}
+                  AND cb.status = ${params.status}
+                ORDER BY cb.updated_at DESC
+              `
+            : sql`
+                SELECT cb.*, c.name as client_name, k.keyword as target_keyword
+                FROM content_briefs cb
+                JOIN clients c ON cb.client_id = c.id
+                LEFT JOIN keywords k ON cb.target_keyword_id = k.id
+                WHERE c.org_id = ${session.orgId}
+                ORDER BY cb.updated_at DESC
+              `,
+      sql`
+        SELECT id, name FROM clients
+        WHERE org_id = ${session.orgId} AND status = 'active'
+        ORDER BY name
+      `,
+      sql`
+        SELECT k.id, k.keyword, k.client_id
+        FROM keywords k
+        JOIN clients c ON k.client_id = c.id
+        WHERE c.org_id = ${session.orgId} AND k.is_tracked = true
+        ORDER BY k.keyword
+      `,
+    ]);
 
-  const briefs = briefsResult as unknown as BriefWithRelations[];
-  const clients = clientsResult as unknown as Pick<Client, "id" | "name">[];
-  const keywords = keywordsResult as unknown as Pick<Keyword, "id" | "keyword" | "client_id">[];
+    briefs = briefsResult as unknown as BriefWithRelations[];
+    clients = clientsResult as unknown as Pick<Client, "id" | "name">[];
+    keywords = keywordsResult as unknown as Pick<Keyword, "id" | "keyword" | "client_id">[];
+  } catch {
+    briefs = [];
+    clients = [];
+    keywords = [];
+  }
 
   return (
     <div className="min-h-screen bg-background">

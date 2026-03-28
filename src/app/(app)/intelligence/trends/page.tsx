@@ -26,41 +26,48 @@ export default async function TrendsPage({ searchParams }: TrendsPageProps) {
   const clientId = params.client_id ?? null;
   const days = Number(params.days) || 30;
 
-  const [trendsResult, clientsResult] = await Promise.all([
-    clientId
-      ? sql`
-          SELECT t.*, c.name as client_name
-          FROM trends t
-          LEFT JOIN clients c ON t.client_id = c.id
-          WHERE t.client_id = ${clientId}
-            AND t.detected_at > NOW() - INTERVAL '1 day' * ${days}
-          ORDER BY t.detected_at DESC
-          LIMIT 50
-        `
-      : sql`
-          SELECT t.*, c.name as client_name
-          FROM trends t
-          LEFT JOIN clients c ON t.client_id = c.id
-          LEFT JOIN clients c2 ON t.client_id = c2.id AND c2.org_id = ${session.orgId}
-          WHERE (t.client_id IS NULL OR c2.id IS NOT NULL)
-            AND t.detected_at > NOW() - INTERVAL '1 day' * ${days}
-          ORDER BY t.detected_at DESC
-          LIMIT 50
-        `,
-    sql`
-      SELECT id, name FROM clients
-      WHERE org_id = ${session.orgId}
-      ORDER BY name
-    `,
-  ]);
+  let trends: Array<Trend & { client_name: string | null }> = [];
+  let clients: Array<{ id: string; name: string }> = [];
+  try {
+    const [trendsResult, clientsResult] = await Promise.all([
+      clientId
+        ? sql`
+            SELECT t.*, c.name as client_name
+            FROM trends t
+            LEFT JOIN clients c ON t.client_id = c.id
+            WHERE t.client_id = ${clientId}
+              AND t.detected_at > NOW() - INTERVAL '1 day' * ${days}
+            ORDER BY t.detected_at DESC
+            LIMIT 50
+          `
+        : sql`
+            SELECT t.*, c.name as client_name
+            FROM trends t
+            LEFT JOIN clients c ON t.client_id = c.id
+            LEFT JOIN clients c2 ON t.client_id = c2.id AND c2.org_id = ${session.orgId}
+            WHERE (t.client_id IS NULL OR c2.id IS NOT NULL)
+              AND t.detected_at > NOW() - INTERVAL '1 day' * ${days}
+            ORDER BY t.detected_at DESC
+            LIMIT 50
+          `,
+      sql`
+        SELECT id, name FROM clients
+        WHERE org_id = ${session.orgId}
+        ORDER BY name
+      `,
+    ]);
 
-  const trends = trendsResult as unknown as Array<
-    Trend & { client_name: string | null }
-  >;
-  const clients = clientsResult as unknown as Array<{
-    id: string;
-    name: string;
-  }>;
+    trends = trendsResult as unknown as Array<
+      Trend & { client_name: string | null }
+    >;
+    clients = clientsResult as unknown as Array<{
+      id: string;
+      name: string;
+    }>;
+  } catch {
+    trends = [];
+    clients = [];
+  }
 
   return (
     <div className="min-h-screen bg-background">

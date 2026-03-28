@@ -40,36 +40,54 @@ export default async function DashboardPage() {
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const [clientsResult, keywordsResult, actionsResult, actions24hResult, healthResult, moversResult] =
-    await Promise.all([
-      sql`SELECT COUNT(*) as count FROM clients WHERE org_id = ${session.orgId}`,
-      sql`SELECT COUNT(*) as count FROM keywords k JOIN clients c ON k.client_id = c.id WHERE c.org_id = ${session.orgId} AND k.is_tracked = true`,
-      sql`SELECT * FROM agent_action_log ORDER BY created_at DESC LIMIT 20`,
-      sql`SELECT COUNT(*) as count FROM agent_action_log WHERE created_at > NOW() - INTERVAL '24 hours'`,
-      sql`SELECT COALESCE(AVG(health_score), 0) as avg_score FROM clients WHERE org_id = ${session.orgId} AND health_score IS NOT NULL`,
-      sql`SELECT k.id, k.keyword, k.current_rank, k.ranking_url,
-              COALESCE(k.current_rank, 0) - COALESCE(k.previous_rank, 0) as change
-           FROM keywords k
-           JOIN clients c ON k.client_id = c.id
-           WHERE c.org_id = ${session.orgId}
-             AND k.current_rank IS NOT NULL
-             AND k.previous_rank IS NOT NULL
-           ORDER BY ABS(COALESCE(k.current_rank, 0) - COALESCE(k.previous_rank, 0)) DESC
-           LIMIT 10`,
-    ]);
-
-  const totalClients = Number(clientsResult[0]?.count ?? 0);
-  const activeKeywords = Number(keywordsResult[0]?.count ?? 0);
-  const avgHealthScore = Math.round(Number(healthResult[0]?.avg_score ?? 0));
-  const totalActions24h = Number(actions24hResult[0]?.count ?? 0);
-  const recentActions = actionsResult as unknown as AgentAction[];
-  const topMovers = moversResult as unknown as Array<{
+  let totalClients = 0;
+  let activeKeywords = 0;
+  let avgHealthScore = 0;
+  let totalActions24h = 0;
+  let recentActions: AgentAction[] = [];
+  let topMovers: Array<{
     id: string;
     keyword: string;
     current_rank: number | null;
     change: number;
     ranking_url: string | null;
-  }>;
+  }> = [];
+
+  try {
+    const [clientsResult, keywordsResult, actionsResult, actions24hResult, healthResult, moversResult] =
+      await Promise.all([
+        sql`SELECT COUNT(*) as count FROM clients WHERE org_id = ${session.orgId}`,
+        sql`SELECT COUNT(*) as count FROM keywords k JOIN clients c ON k.client_id = c.id WHERE c.org_id = ${session.orgId} AND k.is_tracked = true`,
+        sql`SELECT * FROM agent_action_log ORDER BY created_at DESC LIMIT 20`,
+        sql`SELECT COUNT(*) as count FROM agent_action_log WHERE created_at > NOW() - INTERVAL '24 hours'`,
+        sql`SELECT COALESCE(AVG(health_score), 0) as avg_score FROM clients WHERE org_id = ${session.orgId} AND health_score IS NOT NULL`,
+        sql`SELECT k.id, k.keyword, k.current_rank, k.ranking_url,
+                COALESCE(k.current_rank, 0) - COALESCE(k.previous_rank, 0) as change
+             FROM keywords k
+             JOIN clients c ON k.client_id = c.id
+             WHERE c.org_id = ${session.orgId}
+               AND k.current_rank IS NOT NULL
+               AND k.previous_rank IS NOT NULL
+             ORDER BY ABS(COALESCE(k.current_rank, 0) - COALESCE(k.previous_rank, 0)) DESC
+             LIMIT 10`,
+      ]);
+
+    totalClients = Number(clientsResult[0]?.count ?? 0);
+    activeKeywords = Number(keywordsResult[0]?.count ?? 0);
+    avgHealthScore = Math.round(Number(healthResult[0]?.avg_score ?? 0));
+    totalActions24h = Number(actions24hResult[0]?.count ?? 0);
+    recentActions = actionsResult as unknown as AgentAction[];
+    topMovers = moversResult as unknown as Array<{
+      id: string;
+      keyword: string;
+      current_rank: number | null;
+      change: number;
+      ranking_url: string | null;
+    }>;
+  } catch {
+    // DB queries failed — use default zero values
+  }
+
   const trafficData = generateTrafficData();
 
   return (

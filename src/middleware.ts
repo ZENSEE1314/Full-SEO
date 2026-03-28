@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PATHS = ["/login", "/signup"];
-const PUBLIC_PREFIXES = ["/api/webhooks/"];
+const PUBLIC_PREFIXES = ["/api/auth/", "/api/", "/api/webhooks/"];
 const SESSION_COOKIE_NAME = "nexus_session";
 
 function isPublicPath(pathname: string): boolean {
