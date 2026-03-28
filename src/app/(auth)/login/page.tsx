@@ -4,6 +4,7 @@ import Link from "next/link";
 import { sql } from "@/lib/db";
 import { verifyPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
+import { ensureAuthTables } from "@/lib/auth/ensure-tables";
 import { LoginForm } from "./LoginForm";
 
 async function loginAction(
@@ -19,31 +20,38 @@ async function loginAction(
     return { error: "Email and password are required." };
   }
 
-  const rows = await sql`
-    SELECT u.id, u.email, u.name, u.password_hash, om.org_id, om.role
-    FROM users u
-    LEFT JOIN org_members om ON om.user_id = u.id
-    WHERE u.email = ${email.toLowerCase().trim()}
-    LIMIT 1
-  `;
+  try {
+    await ensureAuthTables();
 
-  if (rows.length === 0) {
-    return { error: "Invalid email or password." };
+    const rows = await sql`
+      SELECT u.id, u.email, u.name, u.password_hash, om.org_id, om.role
+      FROM users u
+      LEFT JOIN org_members om ON om.user_id = u.id
+      WHERE u.email = ${email.toLowerCase().trim()}
+      LIMIT 1
+    `;
+
+    if (rows.length === 0) {
+      return { error: "Invalid email or password." };
+    }
+
+    const user = rows[0];
+    const isValid = await verifyPassword(password, user.password_hash);
+    if (!isValid) {
+      return { error: "Invalid email or password." };
+    }
+
+    await createSession({
+      userId: user.id,
+      orgId: user.org_id ?? "",
+      role: user.role ?? "owner",
+      email: user.email,
+      name: user.name,
+    });
+  } catch (error) {
+    console.error("[login] Auth error:", error);
+    return { error: "Something went wrong. Please try again." };
   }
-
-  const user = rows[0];
-  const isValid = await verifyPassword(password, user.password_hash);
-  if (!isValid) {
-    return { error: "Invalid email or password." };
-  }
-
-  await createSession({
-    userId: user.id,
-    orgId: user.org_id ?? "",
-    role: user.role ?? "owner",
-    email: user.email,
-    name: user.name,
-  });
 
   redirect("/dashboard");
 }

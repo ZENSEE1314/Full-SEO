@@ -4,6 +4,7 @@ import Link from "next/link";
 import { sql } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
+import { ensureAuthTables } from "@/lib/auth/ensure-tables";
 import { SignupForm } from "./SignupForm";
 
 async function signupAction(
@@ -25,45 +26,48 @@ async function signupAction(
     return { error: "Password must be at least 8 characters." };
   }
 
-  // Check if email already exists
-  const existing = await sql`
-    SELECT id FROM users WHERE email = ${email} LIMIT 1
-  `;
-  if (existing.length > 0) {
-    return { error: "An account with this email already exists." };
+  try {
+    await ensureAuthTables();
+
+    const existing = await sql`
+      SELECT id FROM users WHERE email = ${email} LIMIT 1
+    `;
+    if (existing.length > 0) {
+      return { error: "An account with this email already exists." };
+    }
+
+    const passwordHash = await hashPassword(password);
+
+    const userRows = await sql`
+      INSERT INTO users (email, name, password_hash)
+      VALUES (${email}, ${name}, ${passwordHash})
+      RETURNING id
+    `;
+    const userId = userRows[0].id;
+
+    const orgRows = await sql`
+      INSERT INTO organizations (name, slug)
+      VALUES (${orgName}, ${orgName.toLowerCase().replace(/[^a-z0-9]+/g, "-")})
+      RETURNING id
+    `;
+    const orgId = orgRows[0].id;
+
+    await sql`
+      INSERT INTO org_members (org_id, user_id, role)
+      VALUES (${orgId}, ${userId}, 'owner')
+    `;
+
+    await createSession({
+      userId,
+      orgId,
+      role: "owner",
+      email,
+      name,
+    });
+  } catch (error) {
+    console.error("[signup] Auth error:", error);
+    return { error: "Something went wrong. Please try again." };
   }
-
-  const passwordHash = await hashPassword(password);
-
-  // Create user
-  const userRows = await sql`
-    INSERT INTO users (email, name, password_hash)
-    VALUES (${email}, ${name}, ${passwordHash})
-    RETURNING id
-  `;
-  const userId = userRows[0].id;
-
-  // Create organization
-  const orgRows = await sql`
-    INSERT INTO organizations (name, slug)
-    VALUES (${orgName}, ${orgName.toLowerCase().replace(/[^a-z0-9]+/g, "-")})
-    RETURNING id
-  `;
-  const orgId = orgRows[0].id;
-
-  // Create org membership
-  await sql`
-    INSERT INTO org_members (org_id, user_id, role)
-    VALUES (${orgId}, ${userId}, 'owner')
-  `;
-
-  await createSession({
-    userId,
-    orgId,
-    role: "owner",
-    email,
-    name,
-  });
 
   redirect("/dashboard");
 }
