@@ -15,7 +15,6 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -123,15 +122,12 @@ export function BriefDialog({ clients, keywords, onSubmit }: BriefDialogProps) {
   const isValid = title.trim().length > 0 && clientId.length > 0;
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        render={
-          <Button>
-            <Plus className="size-4" data-icon="inline-start" />
-            New Brief
-          </Button>
-        }
-      />
+    <>
+      <Button type="button" onClick={() => setIsOpen(true)}>
+        <Plus className="size-4" data-icon="inline-start" />
+        New Brief
+      </Button>
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>New Content Brief</DialogTitle>
@@ -274,5 +270,6 @@ export function BriefDialog({ clients, keywords, onSubmit }: BriefDialogProps) {
         </form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
