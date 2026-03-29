@@ -39,7 +39,6 @@ interface KeywordOption {
 interface BriefDialogProps {
   clients: ClientOption[];
   keywords: KeywordOption[];
-  trigger: React.ReactNode;
   onSubmit: (data: {
     title: string;
     client_id: string;
@@ -50,7 +49,7 @@ interface BriefDialogProps {
   }) => Promise<void>;
 }
 
-export function BriefDialog({ clients, keywords, trigger, onSubmit }: BriefDialogProps) {
+export function BriefDialog({ clients, keywords, onSubmit }: BriefDialogProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -125,7 +124,14 @@ export function BriefDialog({ clients, keywords, trigger, onSubmit }: BriefDialo
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogTrigger render={<>{trigger}</>} />
+      <DialogTrigger
+        render={
+          <Button>
+            <Plus className="size-4" data-icon="inline-start" />
+            New Brief
+          </Button>
+        }
+      />
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>New Content Brief</DialogTitle>

@@ -2,9 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Plus, LayoutGrid, Filter } from "lucide-react";
-
-import { Button } from "@/components/ui/button";
+import { LayoutGrid, Filter } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -135,12 +133,6 @@ export function BriefsPageClient({
           <BriefDialog
             clients={clients}
             keywords={keywords}
-            trigger={
-              <Button>
-                <Plus className="size-4" data-icon="inline-start" />
-                New Brief
-              </Button>
-            }
             onSubmit={handleCreateBrief}
           />
         </div>
