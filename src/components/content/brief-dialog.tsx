@@ -3,7 +3,6 @@
 import * as React from "react";
 import { X, Plus, Loader2 } from "lucide-react";
 
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +14,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -122,12 +122,15 @@ export function BriefDialog({ clients, keywords, onSubmit }: BriefDialogProps) {
   const isValid = title.trim().length > 0 && clientId.length > 0;
 
   return (
-    <>
-      <Button type="button" onClick={() => setIsOpen(true)}>
-        <Plus className="size-4" data-icon="inline-start" />
-        New Brief
-      </Button>
-      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogTrigger
+        render={
+          <Button size="default">
+            <Plus className="size-4" data-icon="inline-start" aria-hidden="true" />
+            New Brief
+          </Button>
+        }
+      />
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>New Content Brief</DialogTitle>
@@ -270,6 +273,5 @@ export function BriefDialog({ clients, keywords, onSubmit }: BriefDialogProps) {
         </form>
       </DialogContent>
     </Dialog>
-    </>
   );
 }
