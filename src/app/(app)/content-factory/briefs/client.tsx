@@ -105,19 +105,18 @@ export function BriefsPageClient({
     brief_text: string;
     source: "manual" | "trend" | "gap_analysis";
   }) {
-    try {
-      const response = await fetch("/api/content/briefs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
+    const response = await fetch("/api/content/briefs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
 
-      if (response.ok) {
-        router.refresh();
-      }
-    } catch {
-      // Handled by refresh
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error ?? `Failed to create brief (${response.status})`);
     }
+
+    router.refresh();
   }
 
   return (

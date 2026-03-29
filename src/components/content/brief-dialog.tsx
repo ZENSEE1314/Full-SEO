@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { X, Plus } from "lucide-react";
+import { X, Plus, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -47,11 +47,13 @@ interface BriefDialogProps {
     secondary_keywords: string[];
     brief_text: string;
     source: "manual" | "trend" | "gap_analysis";
-  }) => void;
+  }) => Promise<void>;
 }
 
 export function BriefDialog({ clients, keywords, trigger, onSubmit }: BriefDialogProps) {
   const [isOpen, setIsOpen] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
   const [title, setTitle] = React.useState("");
   const [clientId, setClientId] = React.useState<string>("");
   const [targetKeywordId, setTargetKeywordId] = React.useState<string>("");
@@ -80,18 +82,27 @@ export function BriefDialog({ clients, keywords, trigger, onSubmit }: BriefDialo
     setSecondaryKeywords((prev) => prev.filter((k) => k !== keyword));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    onSubmit({
-      title,
-      client_id: clientId,
-      target_keyword_id: targetKeywordId || null,
-      secondary_keywords: secondaryKeywords,
-      brief_text: briefText,
-      source,
-    });
-    resetForm();
-    setIsOpen(false);
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      await onSubmit({
+        title,
+        client_id: clientId,
+        target_keyword_id: targetKeywordId || null,
+        secondary_keywords: secondaryKeywords,
+        brief_text: briefText,
+        source,
+      });
+      resetForm();
+      setIsOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create brief");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   function resetForm() {
@@ -102,12 +113,18 @@ export function BriefDialog({ clients, keywords, trigger, onSubmit }: BriefDialo
     setSecondaryKeywords([]);
     setBriefText("");
     setSource("manual");
+    setError(null);
+  }
+
+  function handleOpenChange(open: boolean) {
+    setIsOpen(open);
+    if (!open) resetForm();
   }
 
   const isValid = title.trim().length > 0 && clientId.length > 0;
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger render={<>{trigger}</>} />
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
@@ -232,10 +249,20 @@ export function BriefDialog({ clients, keywords, trigger, onSubmit }: BriefDialo
             </Select>
           </div>
 
+          {error && (
+            <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          )}
+
           <DialogFooter>
-            <Button type="submit" disabled={!isValid}>
-              <Plus className="size-4" data-icon="inline-start" />
-              Create Brief
+            <Button type="submit" disabled={!isValid || isSubmitting}>
+              {isSubmitting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Plus className="size-4" data-icon="inline-start" />
+              )}
+              {isSubmitting ? "Creating..." : "Create Brief"}
             </Button>
           </DialogFooter>
         </form>
