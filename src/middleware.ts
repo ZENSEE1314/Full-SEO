@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PATHS = ["/login", "/signup"];
-const PUBLIC_PREFIXES = ["/api/auth/", "/api/", "/api/webhooks/"];
+const PUBLIC_PREFIXES = ["/api/auth/", "/api/webhooks/"];
 const SESSION_COOKIE_NAME = "nexus_session";
 
 function isPublicPath(pathname: string): boolean {
@@ -92,11 +92,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Set user context headers for API routes
-  const response = NextResponse.next();
-  response.headers.set("x-user-id", session.userId);
-  response.headers.set("x-org-id", session.orgId);
-  return response;
+  // Forward user context to API routes via request headers
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-user-id", session.userId);
+  requestHeaders.set("x-org-id", session.orgId);
+
+  return NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 }
 
 export const config = {
