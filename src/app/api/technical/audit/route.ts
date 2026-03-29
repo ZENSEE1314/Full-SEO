@@ -155,6 +155,9 @@ async function runInlineAudit(
     )
   `;
 
+  // Recalculate health score for this client
+  await recalculateHealthScore(clientId, perfScore);
+
   return {
     pagesAudited: 1,
     issuesFound: issues.length,
@@ -385,4 +388,49 @@ function calculatePerfScore(statusCode: number, ttfbMs: number): number {
   if (ttfbMs < 2000) return 50;
   if (ttfbMs < 5000) return 30;
   return 15;
+}
+
+const MAX_CRITICAL_DEDUCTION = 45;
+const MAX_WARNING_DEDUCTION = 25;
+const MAX_INFO_DEDUCTION = 10;
+const CRITICAL_PENALTY = 15;
+const WARNING_PENALTY = 5;
+const INFO_PENALTY = 1;
+const ISSUE_WEIGHT = 0.6;
+const PERF_WEIGHT = 0.4;
+
+async function recalculateHealthScore(
+  clientId: string,
+  latestPerfScore: number,
+): Promise<void> {
+  const issueCounts = await sql`
+    SELECT severity, COUNT(*)::int AS count
+    FROM technical_issues
+    WHERE client_id = ${clientId} AND fixed_at IS NULL
+    GROUP BY severity
+  `;
+
+  let issueScore = 100;
+  for (const row of issueCounts) {
+    const count = Number(row.count);
+    if (row.severity === "critical") {
+      issueScore -= Math.min(count * CRITICAL_PENALTY, MAX_CRITICAL_DEDUCTION);
+    } else if (row.severity === "warning") {
+      issueScore -= Math.min(count * WARNING_PENALTY, MAX_WARNING_DEDUCTION);
+    } else {
+      issueScore -= Math.min(count * INFO_PENALTY, MAX_INFO_DEDUCTION);
+    }
+  }
+  issueScore = Math.max(0, issueScore);
+
+  const perfNormalized = Math.max(0, Math.min(100, latestPerfScore));
+  const healthScore = Math.round(
+    issueScore * ISSUE_WEIGHT + perfNormalized * PERF_WEIGHT,
+  );
+
+  await sql`
+    UPDATE clients
+    SET health_score = ${healthScore}, updated_at = NOW()
+    WHERE id = ${clientId}
+  `;
 }

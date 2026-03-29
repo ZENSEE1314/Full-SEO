@@ -71,7 +71,7 @@ export default async function ProspectsPage({ searchParams }: PageProps) {
               Discover and manage link building opportunities
             </p>
           </div>
-          <DiscoverButton orgId={session.orgId} />
+          <DiscoverButton />
         </header>
 
         {/* Filters */}
@@ -93,36 +93,25 @@ export default async function ProspectsPage({ searchParams }: PageProps) {
   );
 }
 
-function DiscoverButton({ orgId }: { orgId: string }) {
-  async function handleDiscover() {
-    "use server";
-    const { triggerWorkflow } = await import("@/lib/n8n/client");
-    await triggerWorkflow("discover-prospects", { orgId });
-  }
-
+function DiscoverButton() {
   return (
-    <form action={handleDiscover}>
-      <button
-        type="submit"
-        className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-2.5 py-2 text-sm font-medium text-primary-foreground transition-all outline-none hover:bg-primary/90 focus-visible:ring-3 focus-visible:ring-ring/50 h-8"
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-2 text-sm text-muted-foreground">
+      <svg
+        className="size-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        strokeWidth={2}
+        stroke="currentColor"
+        aria-hidden="true"
       >
-        <svg
-          className="size-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={2}
-          stroke="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
-          />
-        </svg>
-        Discover Prospects
-      </button>
-    </form>
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+        />
+      </svg>
+      Add prospects manually via the client backlinks tab
+    </span>
   );
 }
 
