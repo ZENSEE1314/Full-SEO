@@ -28,6 +28,8 @@ export function TrendsToolbar({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isDiscovering, setIsDiscovering] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   function handleFilterChange(key: string, value: string | null) {
     const params = new URLSearchParams(searchParams.toString());
@@ -41,15 +43,25 @@ export function TrendsToolbar({
 
   async function handleDiscover() {
     setIsDiscovering(true);
+    setError(null);
+    setSuccessMessage(null);
     try {
-      await fetch("/api/intelligence/trends", {
+      const res = await fetch("/api/intelligence/trends", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          client_id: currentClientId,
+          client_id: currentClientId ?? undefined,
         }),
       });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Failed to discover trends");
+        return;
+      }
+      setSuccessMessage(data.message ?? `Discovered ${data.trendsCreated} trends`);
       router.refresh();
+    } catch {
+      setError("Network error. Please try again.");
     } finally {
       setIsDiscovering(false);
     }
@@ -108,20 +120,28 @@ export function TrendsToolbar({
         </div>
       </div>
 
-      {/* Discover button */}
-      <Button
-        onClick={handleDiscover}
-        disabled={isDiscovering}
-        className="gap-1.5"
-        size="sm"
-      >
-        {isDiscovering ? (
-          <Loader2 className="size-3.5 animate-spin" />
-        ) : (
-          <Radar className="size-3.5" />
+      {/* Discover button + feedback */}
+      <div className="flex items-center gap-3">
+        {error && (
+          <p className="text-xs text-destructive">{error}</p>
         )}
-        Discover Trends
-      </Button>
+        {successMessage && !error && (
+          <p className="text-xs text-emerald-400">{successMessage}</p>
+        )}
+        <Button
+          onClick={handleDiscover}
+          disabled={isDiscovering}
+          className="gap-1.5"
+          size="sm"
+        >
+          {isDiscovering ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Radar className="size-3.5" />
+          )}
+          Discover Trends
+        </Button>
+      </div>
     </div>
   );
 }

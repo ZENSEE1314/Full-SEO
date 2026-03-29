@@ -57,85 +57,99 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const clientId = body.client_id as string | undefined;
 
-    if (!clientId) {
-      return NextResponse.json(
-        { error: "client_id is required" },
-        { status: 400 },
-      );
-    }
+    // Get target clients — single client or all org clients
+    let targetClients: Array<{ id: string; domain: string }>;
 
-    // Verify client ownership
-    const clientCheck = await sql`
-      SELECT id, domain FROM clients
-      WHERE id = ${clientId} AND org_id = ${session.orgId}
-      LIMIT 1
-    `;
-    if (clientCheck.length === 0) {
-      return NextResponse.json({ error: "Client not found" }, { status: 404 });
-    }
-
-    // Fetch tracked keywords for this client
-    const keywords = await sql`
-      SELECT keyword FROM keywords
-      WHERE client_id = ${clientId} AND is_tracked = true
-    `;
-
-    if (keywords.length === 0) {
-      return NextResponse.json(
-        { error: "No tracked keywords found. Add keywords first." },
-        { status: 400 },
-      );
-    }
-
-    // Generate trends from keywords
-    let trendsCreated = 0;
-
-    for (const row of keywords) {
-      const keyword = row.keyword as string;
-
-      // Pick 3 random modifiers per keyword
-      const shuffled = [...TREND_MODIFIERS].sort(() => Math.random() - 0.5);
-      const selectedModifiers = shuffled.slice(0, 3);
-
-      for (const modifier of selectedModifiers) {
-        const topic = `${keyword} ${modifier}`;
-        const trendScore = Math.floor(Math.random() * 60) + 40;
-        const relatedQueries = selectedModifiers
-          .filter((m) => m !== modifier)
-          .map((m) => `${keyword} ${m}`);
-
-        await sql`
-          INSERT INTO trends (client_id, topic, trend_score, related_queries, source, detected_at)
-          VALUES (
-            ${clientId},
-            ${topic},
-            ${trendScore},
-            ${relatedQueries},
-            'nexus-discovery',
-            NOW()
-          )
-        `;
-        trendsCreated++;
+    if (clientId) {
+      const clientCheck = await sql`
+        SELECT id, domain FROM clients
+        WHERE id = ${clientId} AND org_id = ${session.orgId}
+        LIMIT 1
+      `;
+      if (clientCheck.length === 0) {
+        return NextResponse.json({ error: "Client not found" }, { status: 404 });
       }
+      targetClients = clientCheck as unknown as Array<{ id: string; domain: string }>;
+    } else {
+      const allClients = await sql`
+        SELECT id, domain FROM clients
+        WHERE org_id = ${session.orgId}
+      `;
+      if (allClients.length === 0) {
+        return NextResponse.json(
+          { error: "No clients found. Add a client first." },
+          { status: 400 },
+        );
+      }
+      targetClients = allClients as unknown as Array<{ id: string; domain: string }>;
     }
 
-    // Log the action
-    await sql`
-      INSERT INTO agent_action_log (client_id, module, action_type, summary, status, created_at)
-      VALUES (
-        ${clientId},
-        'intelligence',
-        'discover_trends',
-        ${`Discovered ${trendsCreated} trending topics from ${keywords.length} tracked keywords`},
-        'success',
-        NOW()
-      )
-    `;
+    let trendsCreated = 0;
+    let totalKeywords = 0;
+
+    for (const client of targetClients) {
+      const keywords = await sql`
+        SELECT keyword FROM keywords
+        WHERE client_id = ${client.id} AND is_tracked = true
+      `;
+
+      if (keywords.length === 0) continue;
+      totalKeywords += keywords.length;
+
+      for (const row of keywords) {
+        const keyword = row.keyword as string;
+
+        // Pick 3 random modifiers per keyword
+        const shuffled = [...TREND_MODIFIERS].sort(() => Math.random() - 0.5);
+        const selectedModifiers = shuffled.slice(0, 3);
+
+        for (const modifier of selectedModifiers) {
+          const topic = `${keyword} ${modifier}`;
+          const trendScore = Math.floor(Math.random() * 60) + 40;
+          const relatedQueries = selectedModifiers
+            .filter((m) => m !== modifier)
+            .map((m) => `${keyword} ${m}`);
+
+          await sql`
+            INSERT INTO trends (client_id, topic, trend_score, related_queries, source, detected_at)
+            VALUES (
+              ${client.id},
+              ${topic},
+              ${trendScore},
+              ${relatedQueries},
+              'nexus-discovery',
+              NOW()
+            )
+          `;
+          trendsCreated++;
+        }
+      }
+
+      // Log per client
+      await sql`
+        INSERT INTO agent_action_log (client_id, module, action_type, summary, status, created_at)
+        VALUES (
+          ${client.id},
+          'intelligence',
+          'discover_trends',
+          ${`Discovered trending topics from tracked keywords`},
+          'success',
+          NOW()
+        )
+      `;
+    }
+
+    if (totalKeywords === 0) {
+      return NextResponse.json(
+        { error: "No tracked keywords found for any client. Add keywords first." },
+        { status: 400 },
+      );
+    }
 
     return NextResponse.json({
       success: true,
       trendsCreated,
-      message: `Discovered ${trendsCreated} trends from ${keywords.length} keywords`,
+      message: `Discovered ${trendsCreated} trends from ${totalKeywords} keywords`,
     });
   } catch (error) {
     console.error("[trends] POST error:", error);
