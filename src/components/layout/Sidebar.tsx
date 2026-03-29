@@ -25,11 +25,11 @@ import {
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/clients", label: "Clients", icon: Building2 },
-  { href: "/intelligence", label: "Intelligence", icon: Brain },
-  { href: "/content", label: "Content Factory", icon: FileText },
-  { href: "/outreach", label: "Outreach", icon: Mail },
-  { href: "/activity", label: "Activity Log", icon: Activity },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/intelligence/trends", label: "Intelligence", icon: Brain, matchPrefix: "/intelligence" },
+  { href: "/content-factory/briefs", label: "Content Factory", icon: FileText, matchPrefix: "/content-factory" },
+  { href: "/outreach/prospects", label: "Outreach", icon: Mail, matchPrefix: "/outreach" },
+  { href: "/activity-log", label: "Activity Log", icon: Activity },
+  { href: "/settings/team", label: "Settings", icon: Settings, matchPrefix: "/settings" },
 ] as const;
 
 export function Sidebar() {
@@ -77,9 +77,10 @@ export function Sidebar() {
         <nav className="relative flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-1" role="list">
             {NAV_ITEMS.map((item) => {
+              const prefix = ("matchPrefix" in item ? item.matchPrefix : item.href) as string;
               const isActive =
                 pathname === item.href ||
-                pathname.startsWith(`${item.href}/`);
+                pathname.startsWith(`${prefix}/`);
               const Icon = item.icon;
 
               const linkContent = (
