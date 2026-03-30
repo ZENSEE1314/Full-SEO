@@ -13,7 +13,9 @@ export async function GET(request: NextRequest) {
     const provider = request.nextUrl.searchParams.get("provider") ?? "google-search-console";
     const credentials = await getGoogleCredentials(session.userId);
 
-    const origin = request.nextUrl.origin;
+    const host = request.headers.get("host") ?? request.nextUrl.host;
+    const proto = request.headers.get("x-forwarded-proto") ?? "https";
+    const origin = `${proto}://${host}`;
     const redirectUri = `${origin}/api/auth/google/callback`;
 
     const state = Buffer.from(

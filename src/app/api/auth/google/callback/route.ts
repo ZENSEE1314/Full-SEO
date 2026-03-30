@@ -31,7 +31,9 @@ export async function GET(request: NextRequest) {
     }
 
     const credentials = await getGoogleCredentials(state.userId);
-    const origin = request.nextUrl.origin;
+    const host = request.headers.get("host") ?? request.nextUrl.host;
+    const proto = request.headers.get("x-forwarded-proto") ?? "https";
+    const origin = `${proto}://${host}`;
     const redirectUri = `${origin}/api/auth/google/callback`;
 
     const tokens = await exchangeCodeForTokens(code, redirectUri, credentials);
