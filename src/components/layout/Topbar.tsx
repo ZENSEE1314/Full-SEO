@@ -168,11 +168,15 @@ export function Topbar() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push("/settings/profile")}>
+            <DropdownMenuItem
+              onClick={() => { window.location.href = "/settings/profile"; }}
+            >
               <User className="size-4" aria-hidden="true" />
               Profile
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push("/settings/integrations")}>
+            <DropdownMenuItem
+              onClick={() => { window.location.href = "/settings/integrations"; }}
+            >
               <Settings className="size-4" aria-hidden="true" />
               Settings
             </DropdownMenuItem>
