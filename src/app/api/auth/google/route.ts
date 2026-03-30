@@ -14,19 +14,20 @@ export async function GET(request: NextRequest) {
     const debug = request.nextUrl.searchParams.get("debug") === "1";
     const credentials = await getGoogleCredentials(session.userId);
 
-    const host = request.headers.get("host") ?? request.nextUrl.host;
-    const proto = request.headers.get("x-forwarded-proto") ?? "https";
-    const origin = `${proto}://${host}`;
-    const redirectUri = `${origin}/api/auth/google/callback`;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+      ?? (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null)
+      ?? `${request.headers.get("x-forwarded-proto") ?? "https"}://${request.headers.get("host") ?? request.nextUrl.host}`;
+    const redirectUri = `${baseUrl}/api/auth/google/callback`;
 
     if (debug) {
       return NextResponse.json({
         redirectUri,
+        baseUrl,
+        NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL ?? null,
+        RAILWAY_PUBLIC_DOMAIN: process.env.RAILWAY_PUBLIC_DOMAIN ?? null,
         host: request.headers.get("host"),
         xForwardedProto: request.headers.get("x-forwarded-proto"),
-        xForwardedHost: request.headers.get("x-forwarded-host"),
         nextUrlOrigin: request.nextUrl.origin,
-        nextUrlHost: request.nextUrl.host,
         clientId: credentials.clientId.slice(0, 20) + "...",
       });
     }

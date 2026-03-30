@@ -31,10 +31,10 @@ export async function GET(request: NextRequest) {
     }
 
     const credentials = await getGoogleCredentials(state.userId);
-    const host = request.headers.get("host") ?? request.nextUrl.host;
-    const proto = request.headers.get("x-forwarded-proto") ?? "https";
-    const origin = `${proto}://${host}`;
-    const redirectUri = `${origin}/api/auth/google/callback`;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+      ?? (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null)
+      ?? `${request.headers.get("x-forwarded-proto") ?? "https"}://${request.headers.get("host") ?? request.nextUrl.host}`;
+    const redirectUri = `${baseUrl}/api/auth/google/callback`;
 
     const tokens = await exchangeCodeForTokens(code, redirectUri, credentials);
     const email = await getGoogleUserEmail(tokens.access_token);
