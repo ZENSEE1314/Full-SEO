@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   TrendingUp,
   Clock,
   Sparkles,
   FileText,
   Loader2,
+  Check,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -48,26 +50,47 @@ function getSourceLabel(source: string): string {
 }
 
 export function TrendCard({ trend, style }: TrendCardProps) {
+  const router = useRouter();
   const [isCreatingBrief, setIsCreatingBrief] = useState(false);
+  const [isBriefCreated, setIsBriefCreated] = useState(false);
   const score = trend.trend_score ?? 0;
   const relatedQueries = trend.related_queries ?? [];
   const detectedAt = trend.detected_at
     ? formatDistanceToNow(new Date(trend.detected_at), { addSuffix: true })
     : "Unknown";
 
+  function buildBriefText(topic: string, queries: string[]): string {
+    const queriesSection =
+      queries.length > 0
+        ? `\n\nRelated queries to cover:\n${queries.map((q) => `- ${q}`).join("\n")}`
+        : "";
+    return `Content brief generated from trending topic: "${topic}".\n\nSuggested outline:\n- Introduction to ${topic}\n- Key insights and current developments\n- Actionable takeaways${queriesSection}`;
+  }
+
   async function handleCreateBrief() {
     setIsCreatingBrief(true);
     try {
-      await fetch("/api/intelligence/trends", {
+      const response = await fetch("/api/content/briefs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "create_brief",
-          trend_id: trend.id,
+          title: trend.topic,
           client_id: trend.client_id,
+          source: "trend",
+          brief_text: buildBriefText(trend.topic, relatedQueries),
+          secondary_keywords: relatedQueries,
         }),
       });
-    } finally {
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error ?? "Failed to create brief");
+      }
+
+      setIsBriefCreated(true);
+      router.refresh();
+    } catch (error) {
+      console.error("[TrendCard] Failed to create brief:", error);
       setIsCreatingBrief(false);
     }
   }
@@ -188,15 +211,17 @@ export function TrendCard({ trend, style }: TrendCardProps) {
           variant="outline"
           size="sm"
           onClick={handleCreateBrief}
-          disabled={isCreatingBrief}
+          disabled={isCreatingBrief || isBriefCreated}
           className="gap-1.5"
         >
-          {isCreatingBrief ? (
+          {isBriefCreated ? (
+            <Check className="size-3 text-emerald-400" />
+          ) : isCreatingBrief ? (
             <Loader2 className="size-3 animate-spin" />
           ) : (
             <FileText className="size-3" />
           )}
-          Create Brief
+          {isBriefCreated ? "Brief Created" : "Create Brief"}
         </Button>
         <div className="flex-1" />
         <div

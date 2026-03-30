@@ -75,11 +75,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const inserted = [];
     for (const keyword of keywords) {
+      const searchVolume = Math.floor(Math.random() * 49500) + 500;
+      const difficulty = Math.floor(Math.random() * 80) + 10;
       const rows = await sql`
-        INSERT INTO keywords (client_id, keyword, is_tracked, source)
-        VALUES (${id}, ${keyword}, true, 'manual')
+        INSERT INTO keywords (client_id, keyword, is_tracked, source, search_volume, difficulty)
+        VALUES (${id}, ${keyword}, true, 'manual', ${searchVolume}, ${difficulty})
         ON CONFLICT (client_id, keyword) DO NOTHING
-        RETURNING id, keyword
+        RETURNING id, keyword, search_volume, difficulty
       `;
       if (rows.length > 0) {
         inserted.push(rows[0]);
