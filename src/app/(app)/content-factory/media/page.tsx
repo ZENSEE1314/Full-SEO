@@ -5,7 +5,7 @@ import { getSession } from "@/lib/auth/session";
 import { MediaPageClient } from "./client";
 
 export const metadata = {
-  title: "Media Library | NEXUS SEO",
+  title: "AI Studio | NEXUS SEO",
 };
 
 interface MediaRow {
