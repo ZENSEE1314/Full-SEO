@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { sql } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
-import { refreshAccessToken } from "@/lib/google/oauth";
+import { getGoogleCredentials, refreshAccessToken } from "@/lib/google/oauth";
 
 interface GscRow {
   keys: string[];
@@ -33,7 +33,8 @@ async function getValidToken(orgId: string): Promise<string> {
   const expiresAt = new Date(integration.token_expires_at);
 
   if (new Date() >= expiresAt) {
-    const refreshed = await refreshAccessToken(integration.refresh_token);
+    const credentials = await getGoogleCredentials(orgId);
+    const refreshed = await refreshAccessToken(integration.refresh_token, credentials);
     const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000);
 
     await sql`

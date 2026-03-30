@@ -21,6 +21,7 @@ export default async function IntegrationsPage() {
   if (!session) redirect("/login");
 
   let connectedMap: Record<string, { email: string; lastSync: string | null }> = {};
+  let hasGoogleCredentials = false;
 
   try {
     const rows = await sql`
@@ -31,15 +32,19 @@ export default async function IntegrationsPage() {
 
     for (const row of rows) {
       const r = row as IntegrationRow;
+      if (r.provider === "google-credentials") {
+        const props = r.properties as { client_id?: string } | null;
+        hasGoogleCredentials = !!props?.client_id;
+        continue;
+      }
       connectedMap[r.provider] = {
-        email: r.account_email,
+        email: r.account_email ?? "",
         lastSync: r.properties?.last_sync_at ?? r.updated_at,
       };
     }
   } catch {
-    // Table might not exist yet
     connectedMap = {};
   }
 
-  return <IntegrationsClient connectedMap={connectedMap} />;
+  return <IntegrationsClient connectedMap={connectedMap} hasGoogleCredentials={hasGoogleCredentials} />;
 }

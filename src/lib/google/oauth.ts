@@ -1,5 +1,4 @@
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
+import { sql } from "@/lib/db";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/webmasters.readonly",
@@ -7,9 +6,47 @@ const SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
-export function getGoogleAuthUrl(state: string, redirectUri: string): string {
+interface GoogleCredentials {
+  clientId: string;
+  clientSecret: string;
+}
+
+export async function getGoogleCredentials(orgId: string): Promise<GoogleCredentials> {
+  // Try DB first (saved from Settings page)
+  try {
+    const rows = await sql`
+      SELECT properties FROM integrations
+      WHERE org_id = ${orgId}::uuid AND provider = 'google-credentials' AND is_active = true
+      LIMIT 1
+    `;
+    if (rows.length > 0) {
+      const props = (rows[0] as { properties: { client_id?: string; client_secret?: string } }).properties;
+      if (props.client_id && props.client_secret) {
+        return { clientId: props.client_id, clientSecret: props.client_secret };
+      }
+    }
+  } catch {
+    // Table might not exist yet
+  }
+
+  // Fall back to env vars
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    throw new Error("Google credentials not configured. Add them in Settings > Integrations.");
+  }
+
+  return { clientId, clientSecret };
+}
+
+export function buildGoogleAuthUrl(
+  clientId: string,
+  state: string,
+  redirectUri: string,
+): string {
   const params = new URLSearchParams({
-    client_id: GOOGLE_CLIENT_ID,
+    client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
     scope: SCOPES.join(" "),
@@ -23,6 +60,7 @@ export function getGoogleAuthUrl(state: string, redirectUri: string): string {
 export async function exchangeCodeForTokens(
   code: string,
   redirectUri: string,
+  credentials: GoogleCredentials,
 ): Promise<{
   access_token: string;
   refresh_token: string;
@@ -34,8 +72,8 @@ export async function exchangeCodeForTokens(
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       code,
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
       redirect_uri: redirectUri,
       grant_type: "authorization_code",
     }),
@@ -51,14 +89,15 @@ export async function exchangeCodeForTokens(
 
 export async function refreshAccessToken(
   refreshToken: string,
+  credentials: GoogleCredentials,
 ): Promise<{ access_token: string; expires_in: number }> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       refresh_token: refreshToken,
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
+      client_id: credentials.clientId,
+      client_secret: credentials.clientSecret,
       grant_type: "refresh_token",
     }),
   });
@@ -76,15 +115,4 @@ export async function getGoogleUserEmail(accessToken: string): Promise<string> {
   });
   const data = await res.json();
   return data.email ?? "unknown";
-}
-
-export async function getValidAccessToken(
-  accessToken: string,
-  refreshToken: string,
-  expiresAt: Date,
-): Promise<string> {
-  if (new Date() < expiresAt) return accessToken;
-
-  const refreshed = await refreshAccessToken(refreshToken);
-  return refreshed.access_token;
 }

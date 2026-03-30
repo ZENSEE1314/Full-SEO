@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Check, Key } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 interface ConnectedInfo {
   email: string;
@@ -14,6 +15,7 @@ interface ConnectedInfo {
 
 interface IntegrationsClientProps {
   connectedMap: Record<string, ConnectedInfo>;
+  hasGoogleCredentials: boolean;
 }
 
 const INTEGRATIONS = [
@@ -58,13 +60,43 @@ function GoogleIcon() {
   );
 }
 
-export function IntegrationsClient({ connectedMap }: IntegrationsClientProps) {
+export function IntegrationsClient({ connectedMap, hasGoogleCredentials }: IntegrationsClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
 
+  // Credentials form
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [isSavingCreds, setIsSavingCreds] = useState(false);
+  const [credsSaved, setCredsSaved] = useState(hasGoogleCredentials);
+  const [credsError, setCredsError] = useState<string | null>(null);
+
   const errorParam = searchParams.get("error");
   const connectedParam = searchParams.get("connected");
+
+  async function handleSaveCredentials(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSavingCreds(true);
+    setCredsError(null);
+    try {
+      const res = await fetch("/api/integrations/credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      setCredsSaved(true);
+      setClientId("");
+      setClientSecret("");
+      router.refresh();
+    } catch (err) {
+      setCredsError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setIsSavingCreds(false);
+    }
+  }
 
   async function handleConnect(provider: string) {
     window.location.href = `/api/auth/google?provider=${provider}`;
@@ -130,34 +162,97 @@ export function IntegrationsClient({ connectedMap }: IntegrationsClientProps) {
           </div>
         </div>
 
-        {/* Setup instructions */}
-        {Object.keys(connectedMap).length === 0 && (
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-4 animate-[fade-in_0.5s_ease-out_0.15s_both]">
-            <h3 className="text-sm font-semibold text-amber-400">Setup Required</h3>
-            <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-              To connect Google services, add these env vars to your Railway/Render deployment:
-            </p>
-            <ul className="mt-2 space-y-1 text-xs text-muted-foreground font-mono">
-              <li>GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com</li>
-              <li>GOOGLE_CLIENT_SECRET=your-secret</li>
-            </ul>
-            <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-              Get these from{" "}
-              <a
-                href="https://console.cloud.google.com/apis/credentials"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-emerald-400 underline underline-offset-2"
-              >
-                Google Cloud Console
-              </a>
-              . Enable the Search Console API and Analytics API. Set the OAuth redirect URI to:
-            </p>
-            <code className="mt-1 block rounded-lg bg-black/30 px-3 py-2 text-xs text-emerald-400">
-              https://your-domain.up.railway.app/api/auth/google/callback
-            </code>
+        {/* Google Credentials Form */}
+        <div className="rounded-xl border border-white/[0.06] bg-slate-900/70 backdrop-blur-sm p-5 animate-[fade-in_0.5s_ease-out_0.15s_both]">
+          <div className="flex items-center gap-2 mb-4">
+            <Key className="size-4 text-emerald-400" />
+            <h3 className="text-sm font-semibold text-foreground">Google API Credentials</h3>
+            {credsSaved && (
+              <span className="ml-auto flex items-center gap-1 text-xs text-emerald-400">
+                <Check className="size-3" /> Configured
+              </span>
+            )}
           </div>
-        )}
+
+          {credsSaved ? (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Google credentials are configured. You can now connect Search Console and Analytics below.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCredsSaved(false)}
+              >
+                Update Credentials
+              </Button>
+            </div>
+          ) : (
+            <form onSubmit={handleSaveCredentials} className="space-y-4">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Get these from{" "}
+                <a
+                  href="https://console.cloud.google.com/apis/credentials"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-400 underline underline-offset-2"
+                >
+                  Google Cloud Console
+                </a>
+                . Enable Search Console API + Analytics API. Set OAuth redirect URI to:
+              </p>
+              <code className="block rounded-lg bg-black/30 px-3 py-2 text-xs text-emerald-400">
+                {typeof window !== "undefined" ? window.location.origin : "https://your-domain"}/api/auth/google/callback
+              </code>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label htmlFor="google-client-id" className="text-xs font-medium text-muted-foreground">
+                    Client ID
+                  </label>
+                  <Input
+                    id="google-client-id"
+                    placeholder="xxxxx.apps.googleusercontent.com"
+                    value={clientId}
+                    onChange={(e) => setClientId(e.target.value)}
+                    className="font-mono text-xs"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="google-client-secret" className="text-xs font-medium text-muted-foreground">
+                    Client Secret
+                  </label>
+                  <Input
+                    id="google-client-secret"
+                    type="password"
+                    placeholder="GOCSPX-xxxxxxxxxx"
+                    value={clientSecret}
+                    onChange={(e) => setClientSecret(e.target.value)}
+                    className="font-mono text-xs"
+                  />
+                </div>
+              </div>
+
+              {credsError && (
+                <p className="text-xs text-red-400">{credsError}</p>
+              )}
+
+              <Button
+                type="submit"
+                size="sm"
+                disabled={isSavingCreds || !clientId.trim() || !clientSecret.trim()}
+                className="gap-1.5"
+              >
+                {isSavingCreds ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <Key className="size-3" />
+                )}
+                {isSavingCreds ? "Saving..." : "Save Credentials"}
+              </Button>
+            </form>
+          )}
+        </div>
 
         {/* Integration grid */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2">
