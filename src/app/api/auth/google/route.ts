@@ -11,12 +11,25 @@ export async function GET(request: NextRequest) {
 
   try {
     const provider = request.nextUrl.searchParams.get("provider") ?? "google-search-console";
+    const debug = request.nextUrl.searchParams.get("debug") === "1";
     const credentials = await getGoogleCredentials(session.userId);
 
     const host = request.headers.get("host") ?? request.nextUrl.host;
     const proto = request.headers.get("x-forwarded-proto") ?? "https";
     const origin = `${proto}://${host}`;
     const redirectUri = `${origin}/api/auth/google/callback`;
+
+    if (debug) {
+      return NextResponse.json({
+        redirectUri,
+        host: request.headers.get("host"),
+        xForwardedProto: request.headers.get("x-forwarded-proto"),
+        xForwardedHost: request.headers.get("x-forwarded-host"),
+        nextUrlOrigin: request.nextUrl.origin,
+        nextUrlHost: request.nextUrl.host,
+        clientId: credentials.clientId.slice(0, 20) + "...",
+      });
+    }
 
     const state = Buffer.from(
       JSON.stringify({ userId: session.userId, orgId: session.orgId, provider }),
