@@ -48,33 +48,20 @@ export default async function TeamSettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Atmospheric background */}
-      <div
-        className="pointer-events-none fixed inset-0 -z-10"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 50% at 50% -20%, rgba(16,185,129,0.08), transparent)",
-        }}
-        aria-hidden="true"
-      />
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between animate-[fade-in_0.5s_ease-out_both]">
+        <div>
+          <h2 className="text-lg font-semibold text-foreground">Team Members</h2>
+          <p className="text-sm text-muted-foreground">
+            Manage members and roles in your organization
+          </p>
+        </div>
+        {session.role === "owner" && <InviteDialog />}
+      </div>
 
-      <div className="mx-auto max-w-5xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
-        {/* Header */}
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between animate-[fade-in_0.5s_ease-out_both]">
-          <div>
-            <h1 className="font-heading text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
-              Team
-            </h1>
-            <p className="mt-1 text-base text-muted-foreground">
-              Manage members and roles in your organization
-            </p>
-          </div>
-          {session.role === "owner" && <InviteDialog />}
-        </header>
-
-        {/* Stats summary */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 animate-[fade-in_0.5s_ease-out_0.1s_both]">
+      {/* Stats summary */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 animate-[fade-in_0.5s_ease-out_0.1s_both]">
           {[
             {
               label: "Total Members",
@@ -107,14 +94,13 @@ export default async function TeamSettingsPage() {
           ))}
         </div>
 
-        {/* Table */}
-        <div className="animate-[slide-up_0.4s_ease-out_0.2s_both]">
-          <TeamTable
-            members={members}
-            currentUserId={session.userId}
-            currentUserRole={session.role}
-          />
-        </div>
+      {/* Table */}
+      <div className="animate-[slide-up_0.4s_ease-out_0.2s_both]">
+        <TeamTable
+          members={members}
+          currentUserId={session.userId}
+          currentUserRole={session.role}
+        />
       </div>
     </div>
   );

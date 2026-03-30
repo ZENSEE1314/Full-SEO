@@ -117,25 +117,7 @@ export function IntegrationsClient({ connectedMap, hasGoogleCredentials }: Integ
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div
-        className="pointer-events-none fixed inset-0 -z-10"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 50% at 50% -20%, rgba(16,185,129,0.08), transparent)",
-        }}
-        aria-hidden="true"
-      />
-
-      <div className="mx-auto max-w-5xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
-        <header className="animate-[fade-in_0.5s_ease-out_both]">
-          <h1 className="font-heading text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
-            Integrations
-          </h1>
-          <p className="mt-1 text-base text-muted-foreground">
-            Connect third-party services to power your SEO workflows
-          </p>
-        </header>
+    <div className="space-y-6">
 
         {/* Status banner */}
         {connectedParam && (
@@ -371,7 +353,6 @@ export function IntegrationsClient({ connectedMap, hasGoogleCredentials }: Integ
             );
           })}
         </div>
-      </div>
     </div>
   );
 }

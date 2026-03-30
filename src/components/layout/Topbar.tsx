@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Bell, Search, ChevronRight, LogOut, User, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -55,6 +55,7 @@ function getInitials(name: string): string {
 
 export function Topbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { session, isSidebarCollapsed } = useApp();
   const breadcrumbs = buildBreadcrumbs(pathname);
 
@@ -167,16 +168,22 @@ export function Topbar() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push("/settings/profile")}>
               <User className="size-4" aria-hidden="true" />
               Profile
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push("/settings/integrations")}>
               <Settings className="size-4" aria-hidden="true" />
               Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive">
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => {
+                document.cookie = "nexus_session=; path=/; max-age=0";
+                window.location.href = "/login";
+              }}
+            >
               <LogOut className="size-4" aria-hidden="true" />
               Log out
             </DropdownMenuItem>
