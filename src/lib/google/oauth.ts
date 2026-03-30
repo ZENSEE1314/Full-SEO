@@ -11,12 +11,12 @@ interface GoogleCredentials {
   clientSecret: string;
 }
 
-export async function getGoogleCredentials(orgId: string): Promise<GoogleCredentials> {
-  // Try DB first (saved from Settings page)
+export async function getGoogleCredentials(userId: string): Promise<GoogleCredentials> {
+  // Try DB first (saved from user's Settings page)
   try {
     const rows = await sql`
       SELECT properties FROM integrations
-      WHERE org_id = ${orgId}::uuid AND provider = 'google-credentials' AND is_active = true
+      WHERE user_id = ${userId}::uuid AND provider = 'google-credentials' AND is_active = true
       LIMIT 1
     `;
     if (rows.length > 0) {

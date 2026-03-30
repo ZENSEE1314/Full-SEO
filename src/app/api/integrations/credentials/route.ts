@@ -24,15 +24,16 @@ export async function POST(request: NextRequest) {
     }
 
     await sql`
-      INSERT INTO integrations (org_id, provider, properties, is_active, updated_at)
+      INSERT INTO integrations (org_id, user_id, provider, properties, is_active, updated_at)
       VALUES (
         ${session.orgId}::uuid,
+        ${session.userId}::uuid,
         'google-credentials',
         ${JSON.stringify({ client_id: client_id.trim(), client_secret: client_secret.trim() })}::jsonb,
         true,
         NOW()
       )
-      ON CONFLICT (org_id, provider)
+      ON CONFLICT (user_id, provider)
       DO UPDATE SET
         properties = ${JSON.stringify({ client_id: client_id.trim(), client_secret: client_secret.trim() })}::jsonb,
         is_active = true,
@@ -55,7 +56,7 @@ export async function GET() {
   try {
     const rows = await sql`
       SELECT properties FROM integrations
-      WHERE org_id = ${session.orgId}::uuid AND provider = 'google-credentials' AND is_active = true
+      WHERE user_id = ${session.userId}::uuid AND provider = 'google-credentials' AND is_active = true
       LIMIT 1
     `;
 

@@ -27,7 +27,7 @@ export default async function IntegrationsPage() {
     const rows = await sql`
       SELECT provider, account_email, is_active, properties, updated_at
       FROM integrations
-      WHERE org_id = ${session.orgId}::uuid AND is_active = true
+      WHERE user_id = ${session.userId}::uuid AND is_active = true
     `;
 
     for (const row of rows) {

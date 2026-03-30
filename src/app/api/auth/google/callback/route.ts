@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    let state: { orgId: string; provider: string };
+    let state: { userId: string; orgId: string; provider: string };
     try {
       state = JSON.parse(Buffer.from(stateParam, "base64url").toString());
     } catch {
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const credentials = await getGoogleCredentials(state.orgId);
+    const credentials = await getGoogleCredentials(state.userId);
     const origin = request.nextUrl.origin;
     const redirectUri = `${origin}/api/auth/google/callback`;
 
@@ -41,9 +41,10 @@ export async function GET(request: NextRequest) {
     const scopes = tokens.scope.split(" ");
 
     await sql`
-      INSERT INTO integrations (org_id, provider, access_token, refresh_token, token_expires_at, scopes, account_email, is_active, updated_at)
+      INSERT INTO integrations (org_id, user_id, provider, access_token, refresh_token, token_expires_at, scopes, account_email, is_active, updated_at)
       VALUES (
         ${state.orgId}::uuid,
+        ${state.userId}::uuid,
         ${state.provider},
         ${tokens.access_token},
         ${tokens.refresh_token},
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
         true,
         NOW()
       )
-      ON CONFLICT (org_id, provider)
+      ON CONFLICT (user_id, provider)
       DO UPDATE SET
         access_token = EXCLUDED.access_token,
         refresh_token = COALESCE(EXCLUDED.refresh_token, integrations.refresh_token),

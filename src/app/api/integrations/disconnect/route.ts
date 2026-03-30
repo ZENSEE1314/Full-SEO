@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     await sql`
       UPDATE integrations
       SET is_active = false, access_token = NULL, updated_at = NOW()
-      WHERE org_id = ${session.orgId}::uuid AND provider = ${provider}
+      WHERE user_id = ${session.userId}::uuid AND provider = ${provider}
     `;
 
     return NextResponse.json({ success: true });

@@ -11,13 +11,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const provider = request.nextUrl.searchParams.get("provider") ?? "google-search-console";
-    const credentials = await getGoogleCredentials(session.orgId);
+    const credentials = await getGoogleCredentials(session.userId);
 
     const origin = request.nextUrl.origin;
     const redirectUri = `${origin}/api/auth/google/callback`;
 
     const state = Buffer.from(
-      JSON.stringify({ orgId: session.orgId, provider }),
+      JSON.stringify({ userId: session.userId, orgId: session.orgId, provider }),
     ).toString("base64url");
 
     const authUrl = buildGoogleAuthUrl(credentials.clientId, state, redirectUri);

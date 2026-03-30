@@ -12,11 +12,11 @@ interface GscRow {
   position: number;
 }
 
-async function getValidToken(orgId: string): Promise<string> {
+async function getValidToken(userId: string): Promise<string> {
   const rows = await sql`
     SELECT access_token, refresh_token, token_expires_at
     FROM integrations
-    WHERE org_id = ${orgId}::uuid
+    WHERE user_id = ${userId}::uuid
       AND provider = 'google-search-console'
       AND is_active = true
     LIMIT 1
@@ -33,7 +33,7 @@ async function getValidToken(orgId: string): Promise<string> {
   const expiresAt = new Date(integration.token_expires_at);
 
   if (new Date() >= expiresAt) {
-    const credentials = await getGoogleCredentials(orgId);
+    const credentials = await getGoogleCredentials(userId);
     const refreshed = await refreshAccessToken(integration.refresh_token, credentials);
     const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000);
 
@@ -42,7 +42,7 @@ async function getValidToken(orgId: string): Promise<string> {
       SET access_token = ${refreshed.access_token},
           token_expires_at = ${newExpiry.toISOString()}::timestamptz,
           updated_at = NOW()
-      WHERE org_id = ${orgId}::uuid AND provider = 'google-search-console'
+      WHERE user_id = ${userId}::uuid AND provider = 'google-search-console'
     `;
 
     return refreshed.access_token;
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     const siteUrl = `sc-domain:${domain}`;
 
     // Get valid access token
-    const accessToken = await getValidToken(session.orgId);
+    const accessToken = await getValidToken(session.userId);
 
     // Fetch last 28 days of search performance data
     const endDate = new Date().toISOString().split("T")[0];
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
         to_jsonb(NOW()::text)
       ),
       updated_at = NOW()
-      WHERE org_id = ${session.orgId} AND provider = 'google-search-console'
+      WHERE user_id = ${session.userId}::uuid AND provider = 'google-search-console'
     `;
 
     // Log action
