@@ -12,9 +12,11 @@ interface RunAuditButtonProps {
 export function RunAuditButton({ clientId }: RunAuditButtonProps) {
   const [isPending, startTransition] = useTransition();
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   function handleRunAudit() {
     setStatus("running");
+    setErrorMsg(null);
 
     startTransition(async () => {
       try {
@@ -26,14 +28,17 @@ export function RunAuditButton({ clientId }: RunAuditButtonProps) {
 
         if (response.ok) {
           setStatus("done");
-          setTimeout(() => setStatus("idle"), 3000);
+          window.location.reload();
         } else {
+          const data = await response.json().catch(() => ({}));
+          setErrorMsg(data.error ?? `Failed (${response.status})`);
           setStatus("error");
-          setTimeout(() => setStatus("idle"), 3000);
+          setTimeout(() => setStatus("idle"), 5000);
         }
-      } catch {
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : "Network error");
         setStatus("error");
-        setTimeout(() => setStatus("idle"), 3000);
+        setTimeout(() => setStatus("idle"), 5000);
       }
     });
   }
@@ -41,24 +46,29 @@ export function RunAuditButton({ clientId }: RunAuditButtonProps) {
   const isDisabled = isPending || status === "running";
 
   return (
-    <Button
-      onClick={handleRunAudit}
-      disabled={isDisabled}
-      size="lg"
-      className="gap-2"
-    >
-      {status === "running" ? (
-        <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-      ) : (
-        <Radar className="size-4" aria-hidden="true" />
+    <div>
+      <Button
+        onClick={handleRunAudit}
+        disabled={isDisabled}
+        size="lg"
+        className="gap-2"
+      >
+        {status === "running" ? (
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <Radar className="size-4" aria-hidden="true" />
+        )}
+        {status === "running"
+          ? "Running Audit..."
+          : status === "done"
+            ? "Audit Complete"
+            : status === "error"
+              ? "Audit Failed"
+              : "Run Audit"}
+      </Button>
+      {errorMsg && status === "error" && (
+        <p className="text-xs text-red-400 mt-2">{errorMsg}</p>
       )}
-      {status === "running"
-        ? "Running Audit..."
-        : status === "done"
-          ? "Audit Triggered"
-          : status === "error"
-            ? "Audit Failed"
-            : "Run Audit"}
-    </Button>
+    </div>
   );
 }

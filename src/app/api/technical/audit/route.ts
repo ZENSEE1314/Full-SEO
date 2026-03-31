@@ -34,13 +34,18 @@ export async function POST(request: NextRequest) {
     }
 
     const domain = clientRows[0].domain as string;
+    if (!domain) {
+      return NextResponse.json({ error: "Client has no domain set" }, { status: 400 });
+    }
+
     const auditResult = await runInlineAudit(clientId, domain);
 
     return NextResponse.json({ success: true, data: auditResult });
   } catch (error) {
-    console.error("[audit] Failed:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[audit] Failed:", message, error);
     return NextResponse.json(
-      { error: "Audit failed. Please try again." },
+      { error: `Audit failed: ${message}` },
       { status: 500 },
     );
   }
