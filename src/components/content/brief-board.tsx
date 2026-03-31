@@ -10,6 +10,7 @@ import {
   TrendingUp,
   Search,
   GripVertical,
+  Trash2,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ interface BriefBoardProps {
   briefs: BriefCard[];
   onStatusChange: (briefId: string, newStatus: BriefCard["status"]) => void;
   onCardClick: (briefId: string) => void;
+  onDelete: (briefId: string) => void;
 }
 
 const COLUMNS: Array<{
@@ -74,7 +76,7 @@ const SOURCE_CONFIG: Record<BriefCard["source"], { icon: React.ElementType; labe
   gap_analysis: { icon: Search, label: "Gap Analysis" },
 };
 
-export function BriefBoard({ briefs, onStatusChange, onCardClick }: BriefBoardProps) {
+export function BriefBoard({ briefs, onStatusChange, onCardClick, onDelete }: BriefBoardProps) {
   const [draggedId, setDraggedId] = React.useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = React.useState<BriefCard["status"] | null>(null);
 
@@ -183,7 +185,19 @@ export function BriefBoard({ briefs, onStatusChange, onCardClick }: BriefBoardPr
                       <h4 className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
                         {brief.title}
                       </h4>
-                      <GripVertical className="mt-0.5 size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-60" />
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete(brief.id);
+                          }}
+                          className="size-5 flex items-center justify-center rounded text-muted-foreground opacity-0 transition-all group-hover:opacity-60 hover:!opacity-100 hover:text-red-400 hover:bg-red-400/10"
+                          title="Delete brief"
+                        >
+                          <Trash2 className="size-3" />
+                        </button>
+                        <GripVertical className="mt-0.5 size-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-60" />
+                      </div>
                     </div>
 
                     {brief.target_keyword && (

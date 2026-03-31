@@ -107,7 +107,7 @@ async function runInlineAudit(
       ${canonical},
       ${statusCode || null},
       ${!hasRobotsNoindex},
-      'homepage'
+      'landing'
     )
     ON CONFLICT (client_id, url) DO UPDATE SET
       title = EXCLUDED.title,

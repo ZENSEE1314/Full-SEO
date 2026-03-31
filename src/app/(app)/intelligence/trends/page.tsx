@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { sql } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import type { Trend } from "@/types";
-import { TrendCard } from "@/components/intelligence/trend-card";
+import { TrendsGrid } from "@/components/intelligence/trends-grid";
 import { TrendsToolbar } from "@/components/intelligence/trends-toolbar";
 
 export const metadata = {
@@ -101,28 +101,7 @@ export default async function TrendsPage({ searchParams }: TrendsPageProps) {
         </Suspense>
 
         {/* Trends grid */}
-        {trends.length === 0 ? (
-          <div className="flex h-64 items-center justify-center rounded-xl border border-white/[0.06] bg-slate-900/40">
-            <div className="text-center">
-              <p className="text-sm text-muted-foreground">
-                No trends detected yet.
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground/70">
-                Run trend discovery or adjust your filters.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {trends.map((trend, i) => (
-              <TrendCard
-                key={trend.id}
-                trend={trend}
-                style={{ animationDelay: `${80 + i * 50}ms` }}
-              />
-            ))}
-          </div>
-        )}
+        <TrendsGrid initialTrends={trends} />
       </div>
     </div>
   );

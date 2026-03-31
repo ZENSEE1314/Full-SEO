@@ -9,6 +9,7 @@ import {
   FileText,
   Loader2,
   Check,
+  Trash2,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -20,6 +21,7 @@ import type { Trend } from "@/types";
 interface TrendCardProps {
   trend: Trend & { client_name?: string | null };
   style?: React.CSSProperties;
+  onDelete?: (id: string) => void;
 }
 
 const SCORE_THRESHOLDS = {
@@ -49,7 +51,7 @@ function getSourceLabel(source: string): string {
   return labels[source] ?? source;
 }
 
-export function TrendCard({ trend, style }: TrendCardProps) {
+export function TrendCard({ trend, style, onDelete }: TrendCardProps) {
   const router = useRouter();
   const [isCreatingBrief, setIsCreatingBrief] = useState(false);
   const [isBriefCreated, setIsBriefCreated] = useState(false);
@@ -224,14 +226,17 @@ export function TrendCard({ trend, style }: TrendCardProps) {
           {isBriefCreated ? "Brief Created" : "Create Brief"}
         </Button>
         <div className="flex-1" />
-        <div
-          className={cn(
-            "size-2 rounded-full",
-            getScoreColor(score),
-          )}
-          title={`Score: ${score}`}
-        />
-        <Sparkles className="size-3 text-muted-foreground" />
+        {onDelete && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onDelete(trend.id)}
+            className="gap-1.5 text-red-400 hover:text-red-300 hover:border-red-400/30 hover:bg-red-400/10"
+          >
+            <Trash2 className="size-3" />
+            Delete
+          </Button>
+        )}
       </div>
     </article>
   );

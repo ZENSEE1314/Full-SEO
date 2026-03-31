@@ -91,8 +91,20 @@ export function BriefsPageClient({
   }
 
   function handleCardClick(briefId: string) {
-    // Could navigate to detail or open a sheet
     router.push(`/content-factory/briefs?detail=${briefId}`);
+  }
+
+  async function handleDelete(briefId: string) {
+    setBriefs((prev) => prev.filter((b) => b.id !== briefId));
+    try {
+      await fetch("/api/content/briefs", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: briefId }),
+      });
+    } catch {
+      router.refresh();
+    }
   }
 
   async function handleCreateBrief(data: {
@@ -183,6 +195,7 @@ export function BriefsPageClient({
           briefs={filteredBriefs}
           onStatusChange={handleStatusChange}
           onCardClick={handleCardClick}
+          onDelete={handleDelete}
         />
       </div>
     </>

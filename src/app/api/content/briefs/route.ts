@@ -186,3 +186,28 @@ export async function PATCH(request: NextRequest) {
     );
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { id } = await request.json();
+    if (!id) {
+      return NextResponse.json({ error: "Brief ID is required" }, { status: 400 });
+    }
+
+    await sql`
+      DELETE FROM content_briefs
+      WHERE id = ${id}
+        AND client_id IN (SELECT id FROM clients WHERE org_id = ${session.orgId})
+    `;
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("[briefs] DELETE error:", error);
+    return NextResponse.json({ error: "Failed to delete brief" }, { status: 500 });
+  }
+}
