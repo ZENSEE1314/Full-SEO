@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -38,6 +39,10 @@ export async function POST(req: NextRequest) {
     h1,
     canonical_url: canonicalUrl,
   });
+  } catch (error) {
+    console.error("[generate-meta] POST error:", error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal server error" }, { status: 500 });
+  }
 }
 
 function getDomainFromUrl(url: string): string {

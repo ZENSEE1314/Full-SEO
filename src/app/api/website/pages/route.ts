@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 
 export async function PATCH(req: NextRequest) {
+  try {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -77,4 +78,8 @@ export async function PATCH(req: NextRequest) {
   `;
 
   return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("[website/pages] PATCH error:", error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal server error" }, { status: 500 });
+  }
 }

@@ -10,6 +10,7 @@ const ALLOWED_EXTENSIONS = new Set([
 ]);
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -120,6 +121,10 @@ export async function POST(req: NextRequest) {
     repo: repoPath,
     branch,
   });
+  } catch (error) {
+    console.error("[website/github] POST error:", error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal server error" }, { status: 500 });
+  }
 }
 
 function parseRepoPath(input: string): string | null {

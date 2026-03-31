@@ -11,6 +11,7 @@ interface SeoIssue {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -33,6 +34,10 @@ export async function POST(req: NextRequest) {
   const autoFixedContent = applyAutoFixes(content, issues, client.name, client.domain);
 
   return NextResponse.json({ issues, autoFixedContent });
+  } catch (error) {
+    console.error("[website/analyze] POST error:", error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal server error" }, { status: 500 });
+  }
 }
 
 function analyzeHtml(html: string, filePath: string): SeoIssue[] {

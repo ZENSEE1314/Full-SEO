@@ -3,113 +3,127 @@ import { sql } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const session = await getSession();
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json();
-  const { pageId, clientId, url, title, domain, schemaType } = body;
+    const body = await req.json();
+    const { pageId, clientId, url, title, domain, schemaType } = body;
 
-  if (!pageId || !clientId || !schemaType) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    if (!pageId || !clientId || !schemaType) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    const clientCheck = await sql`
+      SELECT id, name FROM clients WHERE id = ${clientId} AND org_id = ${session.orgId}
+    `;
+    if (clientCheck.length === 0) {
+      return NextResponse.json({ error: "Client not found" }, { status: 404 });
+    }
+
+    const clientName = (clientCheck[0] as { name: string }).name;
+    const schema = generateSchema(schemaType, { url, title, domain, clientName });
+
+    await sql`
+      INSERT INTO schema_markups (page_id, schema_type, json_ld, is_valid, validation_errors)
+      VALUES (${pageId}, ${schemaType}, ${JSON.stringify(schema)}::jsonb, true, ARRAY[]::text[])
+    `;
+
+    // Mark any "no structured data" issues as fixed
+    await sql`
+      UPDATE technical_issues SET fixed_at = NOW()
+      WHERE page_id = ${pageId}
+        AND issue_type IN ('missing_schema', 'no_structured_data', 'missing_json_ld')
+        AND fixed_at IS NULL
+    `;
+
+    await sql`
+      INSERT INTO agent_action_log (client_id, module, action_type, summary, status, triggered_by)
+      VALUES (
+        ${clientId}, 'website', 'schema_added',
+        ${"Added " + schemaType + " schema to " + (url || pageId)},
+        'completed', 'user'
+      )
+    `;
+
+    return NextResponse.json({ ok: true, schema });
+  } catch (error) {
+    console.error("[generate-schema] POST error:", error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal server error" }, { status: 500 });
   }
-
-  const clientCheck = await sql`
-    SELECT id, name FROM clients WHERE id = ${clientId} AND org_id = ${session.orgId}
-  `;
-  if (clientCheck.length === 0) {
-    return NextResponse.json({ error: "Client not found" }, { status: 404 });
-  }
-
-  const clientName = (clientCheck[0] as { name: string }).name;
-  const schema = generateSchema(schemaType, { url, title, domain, clientName });
-
-  await sql`
-    INSERT INTO schema_markups (page_id, schema_type, json_ld, is_valid, validation_errors)
-    VALUES (${pageId}, ${schemaType}, ${JSON.stringify(schema)}::jsonb, true, ARRAY[]::text[])
-  `;
-
-  // Mark any "no structured data" issues as fixed
-  await sql`
-    UPDATE technical_issues SET fixed_at = NOW()
-    WHERE page_id = ${pageId}
-      AND issue_type IN ('missing_schema', 'no_structured_data', 'missing_json_ld')
-      AND fixed_at IS NULL
-  `;
-
-  await sql`
-    INSERT INTO agent_action_log (client_id, module, action_type, summary, status, triggered_by)
-    VALUES (
-      ${clientId}, 'website', 'schema_added',
-      ${"Added " + schemaType + " schema to " + (url || pageId)},
-      'completed', 'user'
-    )
-  `;
-
-  return NextResponse.json({ ok: true, schema });
 }
 
 export async function PATCH(req: NextRequest) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const body = await req.json();
-  const { schemaId, clientId, json_ld } = body;
-
-  if (!schemaId || !clientId || !json_ld) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-  }
-
-  const clientCheck = await sql`
-    SELECT id FROM clients WHERE id = ${clientId} AND org_id = ${session.orgId}
-  `;
-  if (clientCheck.length === 0) {
-    return NextResponse.json({ error: "Client not found" }, { status: 404 });
-  }
-
-  // Validate JSON
-  let parsed;
   try {
-    parsed = JSON.parse(json_ld);
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 422 });
+    const session = await getSession();
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const body = await req.json();
+    const { schemaId, clientId, json_ld } = body;
+
+    if (!schemaId || !clientId || !json_ld) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    const clientCheck = await sql`
+      SELECT id FROM clients WHERE id = ${clientId} AND org_id = ${session.orgId}
+    `;
+    if (clientCheck.length === 0) {
+      return NextResponse.json({ error: "Client not found" }, { status: 404 });
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(json_ld);
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 422 });
+    }
+
+    const errors: string[] = [];
+    if (!parsed["@context"]) errors.push("Missing @context");
+    if (!parsed["@type"]) errors.push("Missing @type");
+
+    await sql`
+      UPDATE schema_markups SET
+        json_ld = ${JSON.stringify(parsed)}::jsonb,
+        is_valid = ${errors.length === 0},
+        validation_errors = ${errors}
+      WHERE id = ${schemaId}
+    `;
+
+    return NextResponse.json({ ok: true, errors });
+  } catch (error) {
+    console.error("[generate-schema] PATCH error:", error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal server error" }, { status: 500 });
   }
-
-  const errors: string[] = [];
-  if (!parsed["@context"]) errors.push("Missing @context");
-  if (!parsed["@type"]) errors.push("Missing @type");
-
-  await sql`
-    UPDATE schema_markups SET
-      json_ld = ${JSON.stringify(parsed)}::jsonb,
-      is_valid = ${errors.length === 0},
-      validation_errors = ${errors}
-    WHERE id = ${schemaId}
-  `;
-
-  return NextResponse.json({ ok: true, errors });
 }
 
 export async function DELETE(req: NextRequest) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const session = await getSession();
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json();
-  const { schemaId, clientId } = body;
+    const body = await req.json();
+    const { schemaId, clientId } = body;
 
-  if (!schemaId || !clientId) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    if (!schemaId || !clientId) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    const clientCheck = await sql`
+      SELECT id FROM clients WHERE id = ${clientId} AND org_id = ${session.orgId}
+    `;
+    if (clientCheck.length === 0) {
+      return NextResponse.json({ error: "Client not found" }, { status: 404 });
+    }
+
+    await sql`DELETE FROM schema_markups WHERE id = ${schemaId}`;
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("[generate-schema] DELETE error:", error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal server error" }, { status: 500 });
   }
-
-  const clientCheck = await sql`
-    SELECT id FROM clients WHERE id = ${clientId} AND org_id = ${session.orgId}
-  `;
-  if (clientCheck.length === 0) {
-    return NextResponse.json({ error: "Client not found" }, { status: 404 });
-  }
-
-  await sql`DELETE FROM schema_markups WHERE id = ${schemaId}`;
-
-  return NextResponse.json({ ok: true });
 }
 
 function generateSchema(
