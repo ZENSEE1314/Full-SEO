@@ -73,7 +73,7 @@ export async function PATCH(req: NextRequest) {
     VALUES (
       ${clientId}, 'website', 'seo_edit',
       ${"Updated SEO elements for page: " + (title || pageId)},
-      'completed', 'user'
+      'success', 'user'
     )
   `;
 

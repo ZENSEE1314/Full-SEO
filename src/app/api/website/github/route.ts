@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
 
   await sql`
     INSERT INTO agent_action_log (client_id, module, action_type, summary, status, triggered_by)
-    VALUES (${clientId}, 'website', 'github_import', ${"Imported " + fetched + " files from " + repoPath}, 'completed', 'user')
+    VALUES (${clientId}, 'website', 'github_import', ${"Imported " + fetched + " files from " + repoPath}, 'success', 'user')
   `;
 
   return NextResponse.json({

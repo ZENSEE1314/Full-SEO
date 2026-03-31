@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       VALUES (
         ${clientId}, 'website', 'schema_added',
         ${"Added " + schemaType + " schema to " + (url || pageId)},
-        'completed', 'user'
+        'success', 'user'
       )
     `;
 
