@@ -1,19 +1,12 @@
 "use client";
 
+import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { Bell, Search, ChevronRight, LogOut, User, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/contexts/AppContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-} from "@/components/ui/dropdown-menu";
 import { ClientSwitcher } from "./ClientSwitcher";
 
 const ROUTE_LABELS: Record<string, string> = {
@@ -140,59 +133,82 @@ export function Topbar() {
           <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-nexus-accent" />
         </button>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className={cn(
-              "flex items-center gap-2 rounded-lg px-2 py-1",
-              "transition-colors duration-150 hover:bg-muted",
-              "outline-none focus-visible:ring-2 focus-visible:ring-nexus-accent/50"
-            )}
-          >
-            <Avatar size="sm">
-              <AvatarFallback className="bg-nexus-accent/20 text-xs font-600 text-nexus-accent">
-                {getInitials(session.name)}
-              </AvatarFallback>
-            </Avatar>
-            <span className="hidden text-sm font-500 text-foreground md:block">
-              {session.name}
-            </span>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={8}>
-            <DropdownMenuLabel>
-              <div className="flex flex-col">
-                <span className="text-sm font-600">{session.name}</span>
-                <span className="text-xs text-muted-foreground">
-                  {session.email}
-                </span>
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => { window.location.href = "/settings/profile"; }}
-            >
-              <User className="size-4" aria-hidden="true" />
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => { window.location.href = "/settings/integrations"; }}
-            >
-              <Settings className="size-4" aria-hidden="true" />
-              Settings
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="destructive"
-              onClick={() => {
-                document.cookie = "nexus_session=; path=/; max-age=0";
-                window.location.href = "/login";
-              }}
-            >
-              <LogOut className="size-4" aria-hidden="true" />
-              Log out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <UserMenu session={session} />
       </div>
     </header>
+  );
+}
+
+function UserMenu({ session }: { session: { name: string; email: string } }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [isOpen]);
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "flex items-center gap-2 rounded-lg px-2 py-1",
+          "transition-colors duration-150 hover:bg-muted",
+          "outline-none focus-visible:ring-2 focus-visible:ring-nexus-accent/50"
+        )}
+      >
+        <Avatar size="sm">
+          <AvatarFallback className="bg-nexus-accent/20 text-xs font-600 text-nexus-accent">
+            {getInitials(session.name)}
+          </AvatarFallback>
+        </Avatar>
+        <span className="hidden text-sm font-500 text-foreground md:block">
+          {session.name}
+        </span>
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 top-full z-50 mt-2 w-56 origin-top-right rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 animate-in fade-in-0 zoom-in-95">
+          <div className="px-1.5 py-1">
+            <p className="text-sm font-semibold">{session.name}</p>
+            <p className="text-xs text-muted-foreground">{session.email}</p>
+          </div>
+          <div className="-mx-1 my-1 h-px bg-border" />
+          <a
+            href="/settings/profile"
+            className="flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+          >
+            <User className="size-4" aria-hidden="true" />
+            Profile
+          </a>
+          <a
+            href="/settings/integrations"
+            className="flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+          >
+            <Settings className="size-4" aria-hidden="true" />
+            Settings
+          </a>
+          <div className="-mx-1 my-1 h-px bg-border" />
+          <a
+            href="/login"
+            onClick={() => {
+              document.cookie = "nexus_session=; path=/; max-age=0";
+            }}
+            className="flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <LogOut className="size-4" aria-hidden="true" />
+            Log out
+          </a>
+        </div>
+      )}
+    </div>
   );
 }
