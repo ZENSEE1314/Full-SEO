@@ -3,7 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 
-const ALLOWED_PROVIDERS = ["google-credentials", "replicate-api"] as const;
+const ALLOWED_PROVIDERS = [
+  "google-credentials",
+  "replicate-api",
+  "n8n",
+  "whatsapp",
+  "smtp-email",
+] as const;
+
+const RESERVED_KEYS = ["provider", "action"];
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -15,30 +23,24 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const provider = (body.provider as string) ?? "google-credentials";
 
-    if (!ALLOWED_PROVIDERS.includes(provider as typeof ALLOWED_PROVIDERS[number])) {
+    if (!ALLOWED_PROVIDERS.includes(provider as (typeof ALLOWED_PROVIDERS)[number])) {
       return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
     }
 
-    let properties: Record<string, string>;
-
-    if (provider === "google-credentials") {
-      const { client_id, client_secret } = body as { client_id: string; client_secret: string };
-      if (!client_id?.trim() || !client_secret?.trim()) {
-        return NextResponse.json(
-          { error: "Both Client ID and Client Secret are required" },
-          { status: 400 },
-        );
+    // Build properties from all non-reserved keys
+    const properties: Record<string, string> = {};
+    for (const [key, value] of Object.entries(body)) {
+      if (RESERVED_KEYS.includes(key)) continue;
+      if (typeof value === "string" && value.trim()) {
+        properties[key] = value.trim();
       }
-      properties = { client_id: client_id.trim(), client_secret: client_secret.trim() };
-    } else if (provider === "replicate-api") {
-      const { api_token } = body as { api_token: string };
-      if (!api_token?.trim()) {
-        return NextResponse.json({ error: "API token is required" }, { status: 400 });
-      }
-      properties = { api_token: api_token.trim() };
-    } else {
-      return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
     }
+
+    if (Object.keys(properties).length === 0) {
+      return NextResponse.json({ error: "No configuration values provided" }, { status: 400 });
+    }
+
+    const propsJson = JSON.stringify(properties);
 
     await sql`
       INSERT INTO integrations (org_id, user_id, provider, properties, is_active, updated_at)
@@ -46,13 +48,13 @@ export async function POST(request: NextRequest) {
         ${session.orgId}::uuid,
         ${session.userId}::uuid,
         ${provider},
-        ${JSON.stringify(properties)}::jsonb,
+        ${propsJson}::jsonb,
         true,
         NOW()
       )
       ON CONFLICT (user_id, provider)
       DO UPDATE SET
-        properties = ${JSON.stringify(properties)}::jsonb,
+        properties = ${propsJson}::jsonb,
         is_active = true,
         updated_at = NOW()
     `;
@@ -73,28 +75,19 @@ export async function GET() {
   try {
     const rows = await sql`
       SELECT provider, properties FROM integrations
-      WHERE user_id = ${session.userId}::uuid
-        AND provider IN ('google-credentials', 'replicate-api')
-        AND is_active = true
+      WHERE user_id = ${session.userId}::uuid AND is_active = true
     `;
 
-    const result: Record<string, boolean> = {
-      hasGoogleCredentials: false,
-      hasReplicateKey: false,
-    };
-
+    const configured: Record<string, boolean> = {};
     for (const row of rows) {
       const r = row as { provider: string; properties: Record<string, string> | null };
-      if (r.provider === "google-credentials" && r.properties?.client_id) {
-        result.hasGoogleCredentials = true;
-      }
-      if (r.provider === "replicate-api" && r.properties?.api_token) {
-        result.hasReplicateKey = true;
+      if (r.properties && Object.keys(r.properties).length > 0) {
+        configured[r.provider] = true;
       }
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json(configured);
   } catch {
-    return NextResponse.json({ hasGoogleCredentials: false, hasReplicateKey: false });
+    return NextResponse.json({});
   }
 }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Check, Key } from "lucide-react";
+import { Loader2, Check, Key, ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,23 @@ const INTEGRATIONS = [
     description:
       "Connect your n8n instance to power AI workflows and automated tasks.",
     isGoogle: false,
+    configurable: true,
+  },
+  {
+    id: "whatsapp",
+    name: "WhatsApp Business",
+    description:
+      "Auto-send outreach messages to backlink prospects via WhatsApp.",
+    isGoogle: false,
+    configurable: true,
+  },
+  {
+    id: "smtp-email",
+    name: "Email Outreach (SMTP)",
+    description:
+      "Auto-send outreach emails to backlink prospects and link partners.",
+    isGoogle: false,
+    configurable: true,
   },
 ] as const;
 
@@ -60,10 +77,42 @@ function GoogleIcon() {
   );
 }
 
+interface ConfigField {
+  key: string;
+  label: string;
+  placeholder: string;
+  isSecret?: boolean;
+}
+
+const CONFIG_FIELDS: Record<string, ConfigField[]> = {
+  n8n: [
+    { key: "webhook_url", label: "Webhook URL", placeholder: "https://your-n8n.com/webhook/xxxx" },
+    { key: "api_key", label: "API Key (optional)", placeholder: "n8n API key", isSecret: true },
+  ],
+  whatsapp: [
+    { key: "phone_number_id", label: "Phone Number ID", placeholder: "1234567890" },
+    { key: "access_token", label: "Access Token", placeholder: "WhatsApp Business API token", isSecret: true },
+    { key: "template_name", label: "Message Template", placeholder: "outreach_template" },
+  ],
+  "smtp-email": [
+    { key: "smtp_host", label: "SMTP Host", placeholder: "smtp.gmail.com" },
+    { key: "smtp_port", label: "SMTP Port", placeholder: "587" },
+    { key: "smtp_user", label: "Email / Username", placeholder: "you@gmail.com" },
+    { key: "smtp_pass", label: "Password / App Password", placeholder: "xxxx xxxx xxxx", isSecret: true },
+    { key: "from_name", label: "From Name", placeholder: "Your Name" },
+  ],
+};
+
 export function IntegrationsClient({ connectedMap, hasGoogleCredentials }: IntegrationsClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [expandedConfig, setExpandedConfig] = useState<string | null>(null);
+  const [configValues, setConfigValues] = useState<Record<string, Record<string, string>>>({});
+  const [savingConfig, setSavingConfig] = useState<string | null>(null);
+  const [configSaved, setConfigSaved] = useState<Record<string, boolean>>({});
+  const [configError, setConfigError] = useState<string | null>(null);
+  const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
 
   // Credentials form
   const [clientId, setClientId] = useState("");
@@ -110,9 +159,44 @@ export function IntegrationsClient({ connectedMap, hasGoogleCredentials }: Integ
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider }),
       });
+      setConfigSaved((prev) => ({ ...prev, [provider]: false }));
       router.refresh();
     } finally {
       setDisconnecting(null);
+    }
+  }
+
+  async function handleSaveConfig(provider: string) {
+    const values = configValues[provider] ?? {};
+    const fields = CONFIG_FIELDS[provider];
+    if (!fields) return;
+
+    const requiredFields = fields.filter((f) => !f.label.includes("optional"));
+    const missingField = requiredFields.find((f) => !values[f.key]?.trim());
+    if (missingField) {
+      setConfigError(`${missingField.label} is required`);
+      return;
+    }
+
+    setSavingConfig(provider);
+    setConfigError(null);
+    try {
+      const res = await fetch("/api/integrations/credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, ...values }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Save failed");
+      }
+      setConfigSaved((prev) => ({ ...prev, [provider]: true }));
+      setExpandedConfig(null);
+      router.refresh();
+    } catch (err) {
+      setConfigError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSavingConfig(null);
     }
   }
 
@@ -343,12 +427,86 @@ export function IntegrationsClient({ connectedMap, hasGoogleCredentials }: Integ
                     >
                       Connect
                     </Button>
+                  ) : "configurable" in integration && integration.configurable ? (
+                    <Button
+                      size="sm"
+                      variant={configSaved[integration.id] ? "outline" : "default"}
+                      onClick={() => setExpandedConfig(expandedConfig === integration.id ? null : integration.id)}
+                      className="gap-1.5"
+                    >
+                      {configSaved[integration.id] || connectedMap[integration.id] ? (
+                        <>
+                          <Check className="size-3 text-emerald-400" />
+                          Configured
+                        </>
+                      ) : expandedConfig === integration.id ? (
+                        <>
+                          <ChevronUp className="size-3" />
+                          Close
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="size-3" />
+                          Configure
+                        </>
+                      )}
+                    </Button>
                   ) : (
                     <Button size="sm" variant="outline" disabled>
                       Configure
                     </Button>
                   )}
                 </div>
+
+                {/* Config form for configurable integrations */}
+                {expandedConfig === integration.id && CONFIG_FIELDS[integration.id] && (
+                  <div className="border-t border-white/[0.06] pt-4 space-y-3">
+                    {CONFIG_FIELDS[integration.id].map((field) => (
+                      <div key={field.key} className="space-y-1">
+                        <label className="text-xs font-medium text-muted-foreground">{field.label}</label>
+                        <div className="relative">
+                          <Input
+                            type={field.isSecret && !showSecrets[field.key] ? "password" : "text"}
+                            placeholder={field.placeholder}
+                            value={configValues[integration.id]?.[field.key] ?? ""}
+                            onChange={(e) =>
+                              setConfigValues((prev) => ({
+                                ...prev,
+                                [integration.id]: { ...prev[integration.id], [field.key]: e.target.value },
+                              }))
+                            }
+                            className="font-mono text-xs pr-9"
+                          />
+                          {field.isSecret && (
+                            <button
+                              type="button"
+                              onClick={() => setShowSecrets((prev) => ({ ...prev, [field.key]: !prev[field.key] }))}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            >
+                              {showSecrets[field.key] ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {configError && expandedConfig === integration.id && (
+                      <p className="text-xs text-red-400">{configError}</p>
+                    )}
+                    <Button
+                      size="sm"
+                      onClick={() => handleSaveConfig(integration.id)}
+                      disabled={savingConfig === integration.id}
+                      className="gap-1.5"
+                    >
+                      {savingConfig === integration.id ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <Key className="size-3" />
+                      )}
+                      {savingConfig === integration.id ? "Saving..." : "Save Configuration"}
+                    </Button>
+                  </div>
+                )}
               </div>
             );
           })}
