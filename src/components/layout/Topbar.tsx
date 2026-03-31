@@ -168,18 +168,18 @@ export function Topbar() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => { window.location.href = "/settings/profile"; }}
-            >
-              <User className="size-4" aria-hidden="true" />
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => { window.location.href = "/settings/integrations"; }}
-            >
-              <Settings className="size-4" aria-hidden="true" />
-              Settings
-            </DropdownMenuItem>
+            <a href="/settings/profile" className="block">
+              <DropdownMenuItem>
+                <User className="size-4" aria-hidden="true" />
+                Profile
+              </DropdownMenuItem>
+            </a>
+            <a href="/settings/integrations" className="block">
+              <DropdownMenuItem>
+                <Settings className="size-4" aria-hidden="true" />
+                Settings
+              </DropdownMenuItem>
+            </a>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"

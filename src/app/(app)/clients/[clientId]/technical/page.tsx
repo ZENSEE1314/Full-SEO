@@ -93,16 +93,18 @@ export default async function TechnicalPage({
   let speedHistory: SpeedRecord[] = [];
   let schemas: SchemaRow[] = [];
 
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_RE.test(clientId)) notFound();
+
   try {
-    const [clientRows] = await Promise.all([
-      sql`
-        SELECT id, name FROM clients
-        WHERE id = ${clientId} AND org_id = ${session.orgId}
-      `,
-    ]);
+    const clientRows = await sql`
+      SELECT id, name FROM clients
+      WHERE id = ${clientId} AND org_id = ${session.orgId}
+    `;
 
     if (clientRows.length === 0) notFound();
-  } catch {
+  } catch (error) {
+    console.error("[technical] Client check error:", error);
     notFound();
   }
 
