@@ -68,6 +68,10 @@ export default async function WebsitePage({
   let pages: PageRow[] = [];
   let issues: Record<string, unknown>[] = [];
   let schemas: Record<string, unknown>[] = [];
+  let websiteFiles: Array<{
+    id: string; file_path: string; file_type: string; file_size: number;
+    source: string; github_repo: string | null; github_branch: string | null;
+  }> = [];
 
   try {
     const [pagesRows, issuesRows, schemaRows] = await Promise.all([
@@ -145,6 +149,18 @@ export default async function WebsitePage({
     console.error("[website] Data query error:", error);
   }
 
+  try {
+    const fileRows = await sql`
+      SELECT id, file_path, file_type, file_size::int, source, github_repo, github_branch
+      FROM website_files
+      WHERE client_id = ${clientId}
+      ORDER BY file_path ASC
+    `;
+    websiteFiles = fileRows as typeof websiteFiles;
+  } catch (error) {
+    console.error("[website] Files query error:", error);
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div
@@ -174,6 +190,7 @@ export default async function WebsitePage({
           schemas={schemas}
           clientId={clientId}
           clientDomain={clientDomain}
+          initialFiles={websiteFiles}
         />
       </div>
     </div>
