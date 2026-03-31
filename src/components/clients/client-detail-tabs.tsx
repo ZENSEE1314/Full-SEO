@@ -10,6 +10,7 @@ const TABS = [
   { segment: "/keywords", label: "Keywords" },
   { segment: "/content", label: "Content" },
   { segment: "/technical", label: "Technical" },
+  { segment: "/website", label: "Website" },
   { segment: "/backlinks", label: "Backlinks" },
   { segment: "/settings", label: "Settings" },
 ] as const;
