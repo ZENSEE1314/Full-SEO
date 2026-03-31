@@ -1,9 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const CRON_SECRET = process.env.CRON_SECRET;
-const VALID_TASKS = ["all", "seed-ranks", "health-score"] as const;
+
+const VALID_TASKS = [
+  "all",
+  "seed-ranks",
+  "health-score",
+  "rank-tracker",
+  "competitor-monitor",
+  "outreach-runner",
+] as const;
 
 type CronTask = (typeof VALID_TASKS)[number];
+
+const TASK_PATHS: Record<Exclude<CronTask, "all">, string> = {
+  "seed-ranks": "/api/cron/seed-ranks",
+  "health-score": "/api/cron/health-score",
+  "rank-tracker": "/api/cron/rank-tracker",
+  "competitor-monitor": "/api/cron/competitor-monitor",
+  "outreach-runner": "/api/cron/outreach-runner",
+};
+
+// Tasks to run when task=all (daily automation)
+const ALL_TASKS: Exclude<CronTask, "all">[] = [
+  "rank-tracker",
+  "competitor-monitor",
+  "outreach-runner",
+  "health-score",
+];
 
 function buildInternalUrl(path: string, request: NextRequest): string {
   const { protocol, host } = request.nextUrl;
@@ -21,9 +45,13 @@ async function callCronEndpoint(
     headers["authorization"] = authHeader;
   }
 
-  const response = await fetch(url, { method: "POST", headers });
-  const data = await response.json();
-  return { ok: response.ok, data };
+  try {
+    const response = await fetch(url, { method: "POST", headers });
+    const data = await response.json();
+    return { ok: response.ok, data };
+  } catch (error) {
+    return { ok: false, data: { error: String(error) } };
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -39,7 +67,7 @@ export async function GET(request: NextRequest) {
 
     if (!VALID_TASKS.includes(task as CronTask)) {
       return NextResponse.json(
-        { error: `Invalid task. Valid values: ${VALID_TASKS.join(", ")}` },
+        { error: `Invalid task. Valid: ${VALID_TASKS.join(", ")}` },
         { status: 400 },
       );
     }
@@ -47,17 +75,13 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get("authorization");
     const results: Record<string, unknown> = {};
 
-    const shouldRunSeedRanks = task === "all" || task === "seed-ranks";
-    const shouldRunHealthScore = task === "all" || task === "health-score";
+    const tasksToRun = task === "all"
+      ? ALL_TASKS
+      : [task as Exclude<CronTask, "all">];
 
-    if (shouldRunSeedRanks) {
-      const url = buildInternalUrl("/api/cron/seed-ranks", request);
-      results["seed-ranks"] = await callCronEndpoint(url, authHeader);
-    }
-
-    if (shouldRunHealthScore) {
-      const url = buildInternalUrl("/api/cron/health-score", request);
-      results["health-score"] = await callCronEndpoint(url, authHeader);
+    for (const t of tasksToRun) {
+      const url = buildInternalUrl(TASK_PATHS[t], request);
+      results[t] = await callCronEndpoint(url, authHeader);
     }
 
     const hasFailure = Object.values(results).some(
@@ -65,7 +89,7 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json(
-      { task, results },
+      { task, results, ran: tasksToRun.length },
       { status: hasFailure ? 207 : 200 },
     );
   } catch {

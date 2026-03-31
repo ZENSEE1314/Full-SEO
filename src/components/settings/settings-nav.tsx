@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { User, Plug, Users } from "lucide-react";
+import { User, Plug, Users, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/settings/profile", label: "Profile", icon: User },
   { href: "/settings/integrations", label: "Integrations", icon: Plug },
+  { href: "/settings/automation", label: "Automation", icon: Zap },
   { href: "/settings/team", label: "Team", icon: Users },
 ] as const;
 
