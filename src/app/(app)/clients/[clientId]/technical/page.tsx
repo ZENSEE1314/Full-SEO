@@ -197,7 +197,7 @@ export default async function TechnicalPage({
           sm.schema_type,
           sm.json_ld,
           sm.is_valid,
-          COALESCE(sm.errors, '{}') AS errors
+          COALESCE(sm.validation_errors, '{}') AS errors
         FROM schema_markups sm
         JOIN pages p ON p.id = sm.page_id
         WHERE p.client_id = ${clientId}
