@@ -3,75 +3,29 @@ import { redirect, notFound } from "next/navigation";
 import { sql } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { ClientDetailTabs } from "@/components/clients/client-detail-tabs";
-import { VitalsCards } from "@/components/technical/vitals-cards";
-import { IssuesPanel } from "@/components/technical/issues-panel";
-import { PagesTable } from "@/components/technical/pages-table";
-import { SpeedChart } from "@/components/technical/speed-chart";
-import { SchemaViewer } from "@/components/technical/schema-viewer";
 import { RunAuditButton } from "@/components/technical/run-audit-button";
+import { TechnicalContent } from "@/components/technical/technical-content";
 
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ clientId: string }>;
 }) {
-  const { clientId } = await params;
-  const rows = await sql`SELECT name FROM clients WHERE id = ${clientId} LIMIT 1`;
-  const name = (rows[0] as { name: string } | undefined)?.name ?? "Client";
-  return { title: `Technical SEO - ${name} | NEXUS SEO` };
+  try {
+    const { clientId } = await params;
+    const rows = await sql`SELECT name FROM clients WHERE id = ${clientId} LIMIT 1`;
+    const name = (rows[0] as { name: string } | undefined)?.name ?? "Client";
+    return { title: `Technical SEO - ${name} | NEXUS SEO` };
+  } catch {
+    return { title: "Technical SEO | NEXUS SEO" };
+  }
 }
 
 interface VitalsAvg {
-  avg_lcp: number | null;
-  avg_fid: number | null;
-  avg_cls: number | null;
-  avg_ttfb: number | null;
-}
-
-interface IssueSeverityCount {
-  severity: "critical" | "warning" | "info";
-  count: number;
-}
-
-interface PageRow {
-  id: string;
-  url: string;
-  title: string | null;
-  status_code: number | null;
-  is_indexed: boolean | null;
-  page_type: string | null;
-  speed_score: number | null;
-  issue_count: number;
-}
-
-interface IssueRow {
-  id: string;
-  issue_type: string;
-  severity: "critical" | "warning" | "info";
-  description: string | null;
-  page_url: string | null;
-  auto_fixable: boolean;
-  fixed_at: string | null;
-  detected_at: string;
-}
-
-interface SpeedRecord {
-  recorded_at: string;
-  performance_score: number | null;
-  lcp: number | null;
-  fid: number | null;
-  cls: number | null;
-  ttfb: number | null;
-  device: "mobile" | "desktop";
-}
-
-interface SchemaRow {
-  id: string;
-  page_url: string;
-  schema_type: string;
-  json_ld: string;
-  is_valid: boolean;
-  errors: string[];
+  avg_lcp: string | null;
+  avg_fid: string | null;
+  avg_cls: string | null;
+  avg_ttfb: string | null;
 }
 
 export default async function TechnicalPage({
@@ -84,15 +38,6 @@ export default async function TechnicalPage({
 
   const { clientId } = await params;
 
-  let vitals: VitalsAvg = { avg_lcp: null, avg_fid: null, avg_cls: null, avg_ttfb: null };
-  let vitalsHistory = { lcp: [] as number[], fid: [] as number[], cls: [] as number[], ttfb: [] as number[] };
-  let issueCounts: IssueSeverityCount[] = [];
-  let totalIssues = 0;
-  let pages: PageRow[] = [];
-  let issues: IssueRow[] = [];
-  let speedHistory: SpeedRecord[] = [];
-  let schemas: SchemaRow[] = [];
-
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!UUID_RE.test(clientId)) notFound();
 
@@ -101,12 +46,19 @@ export default async function TechnicalPage({
       SELECT id, name FROM clients
       WHERE id = ${clientId} AND org_id = ${session.orgId}
     `;
-
     if (clientRows.length === 0) notFound();
   } catch (error) {
     console.error("[technical] Client check error:", error);
     notFound();
   }
+
+  let vitals = { lcp: null as number | null, fid: null as number | null, cls: null as number | null, ttfb: null as number | null };
+  let vitalsHistory = { lcp: [] as number[], fid: [] as number[], cls: [] as number[], ttfb: [] as number[] };
+  let totalIssues = 0;
+  let pages: Record<string, unknown>[] = [];
+  let issues: Record<string, unknown>[] = [];
+  let speedHistory: Record<string, unknown>[] = [];
+  let schemas: Record<string, unknown>[] = [];
 
   try {
     const [
@@ -120,10 +72,10 @@ export default async function TechnicalPage({
     ] = await Promise.all([
       sql`
         SELECT
-          AVG(pss.lcp) AS avg_lcp,
-          AVG(pss.fid) AS avg_fid,
-          AVG(pss.cls) AS avg_cls,
-          AVG(pss.ttfb) AS avg_ttfb
+          AVG(pss.lcp)::float AS avg_lcp,
+          AVG(pss.fid)::float AS avg_fid,
+          AVG(pss.cls)::float AS avg_cls,
+          AVG(pss.ttfb)::float AS avg_ttfb
         FROM page_speed_scores pss
         JOIN pages p ON p.id = pss.page_id
         WHERE p.client_id = ${clientId}
@@ -144,7 +96,7 @@ export default async function TechnicalPage({
           p.is_indexed,
           p.page_type,
           COALESCE(
-            (SELECT pss.performance_score
+            (SELECT pss.performance_score::float
              FROM page_speed_scores pss
              WHERE pss.page_id = p.id
              ORDER BY pss.recorded_at DESC
@@ -169,7 +121,7 @@ export default async function TechnicalPage({
           ti.description,
           ti.auto_fixable,
           ti.fixed_at,
-          ti.detected_at,
+          ti.detected_at::text AS detected_at,
           p.url AS page_url
         FROM technical_issues ti
         LEFT JOIN pages p ON p.id = ti.page_id
@@ -180,12 +132,12 @@ export default async function TechnicalPage({
       `,
       sql`
         SELECT
-          pss.recorded_at,
-          pss.performance_score,
-          pss.lcp,
-          pss.fid,
-          pss.cls,
-          pss.ttfb,
+          pss.recorded_at::text AS recorded_at,
+          pss.performance_score::float AS performance_score,
+          pss.lcp::float,
+          pss.fid::float,
+          pss.cls::float,
+          pss.ttfb::float,
           pss.device
         FROM page_speed_scores pss
         JOIN pages p ON p.id = pss.page_id
@@ -197,7 +149,7 @@ export default async function TechnicalPage({
           sm.id,
           p.url AS page_url,
           sm.schema_type,
-          sm.json_ld,
+          sm.json_ld::text AS json_ld,
           sm.is_valid,
           COALESCE(sm.validation_errors, ARRAY[]::text[]) AS errors
         FROM schema_markups sm
@@ -207,11 +159,11 @@ export default async function TechnicalPage({
       `,
       sql`
         SELECT
-          pss.lcp,
-          pss.fid,
-          pss.cls,
-          pss.ttfb,
-          pss.recorded_at
+          pss.lcp::float,
+          pss.fid::float,
+          pss.cls::float,
+          pss.ttfb::float,
+          pss.recorded_at::text
         FROM page_speed_scores pss
         JOIN pages p ON p.id = pss.page_id
         WHERE p.client_id = ${clientId}
@@ -221,33 +173,34 @@ export default async function TechnicalPage({
       `,
     ]);
 
-    vitals = (vitalsRows[0] as VitalsAvg | undefined) ?? {
-      avg_lcp: null,
-      avg_fid: null,
-      avg_cls: null,
-      avg_ttfb: null,
-    };
+    const v = vitalsRows[0] as VitalsAvg | undefined;
+    if (v) {
+      vitals = {
+        lcp: v.avg_lcp !== null ? Number(v.avg_lcp) : null,
+        fid: v.avg_fid !== null ? Number(v.avg_fid) : null,
+        cls: v.avg_cls !== null ? Number(v.avg_cls) : null,
+        ttfb: v.avg_ttfb !== null ? Number(v.avg_ttfb) : null,
+      };
+    }
 
     vitalsHistory = {
-      lcp: vitalsHistoryRows.map((r) => (r as { lcp: number | null }).lcp).filter((v): v is number => v !== null),
-      fid: vitalsHistoryRows.map((r) => (r as { fid: number | null }).fid).filter((v): v is number => v !== null),
-      cls: vitalsHistoryRows.map((r) => (r as { cls: number | null }).cls).filter((v): v is number => v !== null),
-      ttfb: vitalsHistoryRows.map((r) => (r as { ttfb: number | null }).ttfb).filter((v): v is number => v !== null),
+      lcp: vitalsHistoryRows.map((r) => Number((r as Record<string, unknown>).lcp)).filter((n) => !isNaN(n)),
+      fid: vitalsHistoryRows.map((r) => Number((r as Record<string, unknown>).fid)).filter((n) => !isNaN(n)),
+      cls: vitalsHistoryRows.map((r) => Number((r as Record<string, unknown>).cls)).filter((n) => !isNaN(n)),
+      ttfb: vitalsHistoryRows.map((r) => Number((r as Record<string, unknown>).ttfb)).filter((n) => !isNaN(n)),
     };
 
-    issueCounts = issueCountRows as unknown as IssueSeverityCount[];
-    totalIssues = issueCounts.reduce((sum, r) => sum + Number(r.count), 0);
-    pages = pagesRows as unknown as PageRow[];
-    issues = issuesRows as unknown as IssueRow[];
-    speedHistory = speedHistoryRows as unknown as SpeedRecord[];
-    schemas = schemaRows as unknown as SchemaRow[];
-  } catch {
-    // Use default empty values
+    totalIssues = (issueCountRows as { count: number }[]).reduce((sum, r) => sum + Number(r.count), 0);
+    pages = pagesRows as Record<string, unknown>[];
+    issues = issuesRows as Record<string, unknown>[];
+    speedHistory = speedHistoryRows as Record<string, unknown>[];
+    schemas = schemaRows as Record<string, unknown>[];
+  } catch (error) {
+    console.error("[technical] Data query error:", error);
   }
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Atmospheric emerald glow */}
       <div
         className="pointer-events-none fixed inset-0 -z-10"
         style={{
@@ -258,7 +211,6 @@ export default async function TechnicalPage({
       />
 
       <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
-        {/* Header */}
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between animate-[fade-in_0.5s_ease-out_both]">
           <div>
             <h1 className="font-heading text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
@@ -276,38 +228,18 @@ export default async function TechnicalPage({
           <RunAuditButton clientId={clientId} />
         </header>
 
-        {/* Tab navigation */}
         <ClientDetailTabs clientId={clientId} />
 
-        {/* Core Web Vitals */}
-        <section className="animate-[slide-up_0.4s_ease-out_0.1s_both]">
-          <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Core Web Vitals
-          </h2>
-          <VitalsCards
-            vitals={{
-              lcp: vitals.avg_lcp ? Number(vitals.avg_lcp) : null,
-              fid: vitals.avg_fid ? Number(vitals.avg_fid) : null,
-              cls: vitals.avg_cls ? Number(vitals.avg_cls) : null,
-              ttfb: vitals.avg_ttfb ? Number(vitals.avg_ttfb) : null,
-            }}
-            history={vitalsHistory}
-          />
-        </section>
-
-        {/* Two-column layout: Issues + Speed Chart */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 animate-[slide-up_0.4s_ease-out_0.2s_both]">
-          <IssuesPanel issues={issues} clientId={clientId} />
-          <div className="flex flex-col gap-6">
-            <SpeedChart records={speedHistory} />
-            <SchemaViewer schemas={schemas} />
-          </div>
-        </div>
-
-        {/* Pages table */}
-        <section className="animate-[slide-up_0.4s_ease-out_0.3s_both]">
-          <PagesTable pages={pages} />
-        </section>
+        <TechnicalContent
+          vitals={vitals}
+          vitalsHistory={vitalsHistory}
+          totalIssues={totalIssues}
+          pages={pages}
+          issues={issues}
+          speedHistory={speedHistory}
+          schemas={schemas}
+          clientId={clientId}
+        />
       </div>
     </div>
   );

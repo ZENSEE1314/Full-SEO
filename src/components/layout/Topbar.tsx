@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { Bell, Search, ChevronRight, LogOut, User, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -10,10 +10,10 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
+import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { ClientSwitcher } from "./ClientSwitcher";
 
 const ROUTE_LABELS: Record<string, string> = {
@@ -55,7 +55,6 @@ function getInitials(name: string): string {
 
 export function Topbar() {
   const pathname = usePathname();
-  const router = useRouter();
   const { session, isSidebarCollapsed } = useApp();
   const breadcrumbs = buildBreadcrumbs(pathname);
 
@@ -168,29 +167,35 @@ export function Topbar() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => { setTimeout(() => router.push("/settings/profile"), 0); }}
+            <MenuPrimitive.Item
+              data-slot="dropdown-menu-item"
+              className="group/dropdown-menu-item relative flex cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+              render={<Link href="/settings/profile" />}
             >
               <User className="size-4" aria-hidden="true" />
               Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => { setTimeout(() => router.push("/settings/integrations"), 0); }}
+            </MenuPrimitive.Item>
+            <MenuPrimitive.Item
+              data-slot="dropdown-menu-item"
+              className="group/dropdown-menu-item relative flex cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+              render={<Link href="/settings/integrations" />}
             >
               <Settings className="size-4" aria-hidden="true" />
               Settings
-            </DropdownMenuItem>
+            </MenuPrimitive.Item>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="destructive"
+            <MenuPrimitive.Item
+              data-slot="dropdown-menu-item"
+              data-variant="destructive"
+              className="group/dropdown-menu-item relative flex cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden select-none data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
               onClick={() => {
                 document.cookie = "nexus_session=; path=/; max-age=0";
-                setTimeout(() => router.push("/login"), 0);
+                window.location.href = "/login";
               }}
             >
               <LogOut className="size-4" aria-hidden="true" />
               Log out
-            </DropdownMenuItem>
+            </MenuPrimitive.Item>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

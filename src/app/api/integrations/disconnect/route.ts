@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
     await sql`
       UPDATE integrations
-      SET is_active = false, access_token = NULL, updated_at = NOW()
+      SET is_active = false, updated_at = NOW()
       WHERE user_id = ${session.userId}::uuid AND provider = ${provider}
     `;
 
