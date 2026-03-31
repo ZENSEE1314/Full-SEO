@@ -31,8 +31,11 @@ export default async function ClientSettingsPage({
 
   let client: Client | null = null;
   let competitors: Competitor[] = [];
+  let hasSearchConsole = false;
+  let hasAnalytics = false;
+
   try {
-    const [clientRows, competitorRows] = await Promise.all([
+    const [clientRows, competitorRows, integrationRows] = await Promise.all([
       sql`
         SELECT id, name, domain, status, settings
         FROM clients
@@ -44,12 +47,23 @@ export default async function ClientSettingsPage({
         WHERE client_id = ${clientId}
         ORDER BY created_at
       `,
+      sql`
+        SELECT provider FROM integrations
+        WHERE user_id = ${session.userId}::uuid AND is_active = true
+          AND provider IN ('google-search-console', 'google-analytics')
+      `,
     ]);
 
     if (clientRows.length === 0) notFound();
 
     client = clientRows[0] as unknown as Client;
     competitors = competitorRows as unknown as Competitor[];
+
+    for (const row of integrationRows) {
+      const r = row as { provider: string };
+      if (r.provider === "google-search-console") hasSearchConsole = true;
+      if (r.provider === "google-analytics") hasAnalytics = true;
+    }
   } catch {
     notFound();
   }
@@ -99,11 +113,11 @@ export default async function ClientSettingsPage({
               <div className="space-y-3">
                 <ConnectionStatus
                   service="Search Console"
-                  isConnected={!!client.settings?.search_console_connected}
+                  isConnected={hasSearchConsole}
                 />
                 <ConnectionStatus
                   service="Analytics"
-                  isConnected={!!client.settings?.analytics_connected}
+                  isConnected={hasAnalytics}
                 />
               </div>
             </section>
