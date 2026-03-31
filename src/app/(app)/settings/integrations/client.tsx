@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Check, Key, ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
 
@@ -113,6 +113,8 @@ export function IntegrationsClient({ connectedMap, hasGoogleCredentials }: Integ
   const [configSaved, setConfigSaved] = useState<Record<string, boolean>>({});
   const [configError, setConfigError] = useState<string | null>(null);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+  const [origin, setOrigin] = useState("https://your-domain");
+  useEffect(() => { setOrigin(window.location.origin); }, []);
 
   // Credentials form
   const [clientId, setClientId] = useState("");
@@ -268,7 +270,7 @@ export function IntegrationsClient({ connectedMap, hasGoogleCredentials }: Integ
                 . Enable Search Console API + Analytics API. Set OAuth redirect URI to:
               </p>
               <code className="block rounded-lg bg-black/30 px-3 py-2 text-xs text-emerald-400">
-                {typeof window !== "undefined" ? window.location.origin : "https://your-domain"}/api/auth/google/callback
+                {origin}/api/auth/google/callback
               </code>
 
               <div className="grid gap-3 sm:grid-cols-2">

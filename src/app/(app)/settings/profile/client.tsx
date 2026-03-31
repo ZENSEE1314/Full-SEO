@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Check, Key, User, Mail, Shield, Eye, EyeOff } from "lucide-react";
 
@@ -36,6 +36,10 @@ export function ProfileClient({ session, hasGoogleCredentials, hasReplicateKey }
   // Show/hide secrets
   const [showGoogleSecret, setShowGoogleSecret] = useState(false);
   const [showReplicateToken, setShowReplicateToken] = useState(false);
+
+  // Avoid hydration mismatch — window.location.origin differs between SSR and client
+  const [origin, setOrigin] = useState("https://your-domain");
+  useEffect(() => { setOrigin(window.location.origin); }, []);
 
   async function handleSaveGoogle(e: React.FormEvent) {
     e.preventDefault();
@@ -152,7 +156,7 @@ export function ProfileClient({ session, hasGoogleCredentials, hasReplicateKey }
               . Enable Search Console API + Analytics API. Set OAuth redirect URI to:
             </p>
             <code className="block rounded-lg bg-black/30 px-3 py-2 text-xs text-emerald-400">
-              {typeof window !== "undefined" ? window.location.origin : "https://your-domain"}/api/auth/google/callback
+              {origin}/api/auth/google/callback
             </code>
 
             <div className="grid gap-3 sm:grid-cols-2">
