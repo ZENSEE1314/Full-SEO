@@ -1,0 +1,90 @@
+{
+  "name": "NEXUS - Competitor Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "triggerAtHour": 7 }] }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 7AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT comp.id AS competitor_id, comp.name AS comp_name, comp.domain AS comp_domain, c.id AS client_id, c.domain AS client_domain, k.keyword, k.id AS keyword_id FROM competitors comp JOIN clients c ON comp.client_id = c.id JOIN keywords k ON k.client_id = c.id WHERE c.status = 'active' AND k.is_tracked = true LIMIT 200"
+      },
+      "id": "fetch-competitors",
+      "name": "Fetch Competitors + Keywords",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [460, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": { "batchSize": 10, "options": {} },
+      "id": "batch-items",
+      "name": "Batch Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/customsearch/v1?key={{$env.GOOGLE_CUSTOM_SEARCH_KEY}}&cx={{$env.GOOGLE_CUSTOM_SEARCH_CX}}&q={{encodeURIComponent($json.keyword)}}&num=10",
+        "options": { "timeout": 10000 }
+      },
+      "id": "serp-check",
+      "name": "Google Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $('Batch Items').item.json;\nconst results = $input.item.json;\nconst items = results.items || [];\n\nlet compRank = null;\nlet compUrl = null;\n\nfor (let i = 0; i < items.length; i++) {\n  if ((items[i].link || '').includes(item.comp_domain)) {\n    compRank = i + 1;\n    compUrl = items[i].link;\n    break;\n  }\n}\n\nreturn [{\n  json: {\n    competitor_id: item.competitor_id,\n    keyword_id: item.keyword_id,\n    keyword: item.keyword,\n    client_id: item.client_id,\n    comp_name: item.comp_name,\n    comp_domain: item.comp_domain,\n    rank: compRank,\n    url: compUrl\n  }\n}];"
+      },
+      "id": "parse-comp-rank",
+      "name": "Parse Competitor Rank",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO competitor_ranks (competitor_id, keyword_id, rank, url, recorded_at) VALUES ('{{$json.competitor_id}}', '{{$json.keyword_id}}', {{$json.rank || 'NULL'}}, {{$json.url ? \"'\" + $json.url + \"'\" : 'NULL'}}, CURRENT_DATE) ON CONFLICT (competitor_id, keyword_id, recorded_at) DO UPDATE SET rank = EXCLUDED.rank, url = EXCLUDED.url"
+      },
+      "id": "upsert-rank",
+      "name": "Upsert Competitor Rank",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1340, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO agent_action_log (client_id, module, action_type, summary, status, triggered_by, created_at) VALUES ('{{$json.client_id}}', 'intelligence', 'competitor_rank_check', 'Competitor {{$json.comp_name}} ranks #{{$json.rank || \"N/A\"}} for \"{{$json.keyword}}\"', 'success', 'n8n-competitor-monitor', NOW())"
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1560, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    }
+  ],
+  "connections": {
+    "Daily 7AM": { "main": [[{ "node": "Fetch Competitors + Keywords", "type": "main", "index": 0 }]] },
+    "Fetch Competitors + Keywords": { "main": [[{ "node": "Batch Items", "type": "main", "index": 0 }]] },
+    "Batch Items": { "main": [[{ "node": "Google Search", "type": "main", "index": 0 }]] },
+    "Google Search": { "main": [[{ "node": "Parse Competitor Rank", "type": "main", "index": 0 }]] },
+    "Parse Competitor Rank": { "main": [[{ "node": "Upsert Competitor Rank", "type": "main", "index": 0 }]] },
+    "Upsert Competitor Rank": { "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "NEXUS-SEO" }]
+}

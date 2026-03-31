@@ -1,0 +1,128 @@
+{
+  "name": "NEXUS - Backlink Prospector",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "backlink-prospector",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "backlink-prospector"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT c.id AS client_id, c.domain, c.name, array_agg(DISTINCT k.keyword) FILTER (WHERE k.is_tracked = true) AS keywords FROM clients c LEFT JOIN keywords k ON k.client_id = c.id WHERE c.id = '{{$json.body.client_id}}' GROUP BY c.id"
+      },
+      "id": "fetch-client",
+      "name": "Fetch Client Info",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [460, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "const client = $input.item.json;\nconst keywords = client.keywords || [];\nconst queries = [];\n\nconst templates = [\n  '\"write for us\" + {kw}',\n  '\"guest post\" + {kw}',\n  '\"submit article\" + {kw}',\n  '\"contribute\" + {kw} + blog',\n  '\"accepting guest posts\" + {kw}',\n  'inurl:write-for-us {kw}',\n  'intitle:\"guest post guidelines\" {kw}',\n  '{kw} + \"become a contributor\"',\n  '{kw} + resource page + link',\n  '{kw} + roundup + blog'\n];\n\nfor (const kw of keywords.slice(0, 5)) {\n  for (const tmpl of templates.slice(0, 3)) {\n    queries.push({\n      json: {\n        client_id: client.client_id,\n        domain: client.domain,\n        query: tmpl.replace('{kw}', kw),\n        keyword: kw\n      }\n    });\n  }\n}\n\nreturn queries.length > 0 ? queries : [{ json: { client_id: client.client_id, domain: client.domain, query: '\"write for us\" + ' + client.domain.split('.')[0], keyword: client.domain.split('.')[0] } }];"
+      },
+      "id": "build-queries",
+      "name": "Build Search Queries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": { "batchSize": 5, "options": {} },
+      "id": "batch-queries",
+      "name": "Batch Queries",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.googleapis.com/customsearch/v1?key={{$env.GOOGLE_CUSTOM_SEARCH_KEY}}&cx={{$env.GOOGLE_CUSTOM_SEARCH_CX}}&q={{encodeURIComponent($json.query)}}&num=10",
+        "options": { "timeout": 10000 }
+      },
+      "id": "google-search",
+      "name": "Google Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $('Batch Queries').item.json;\nconst results = $input.item.json;\nconst items = results.items || [];\nconst prospects = [];\n\nfor (const item of items) {\n  const url = item.link || '';\n  const domain = url.replace(/^https?:\\/\\//, '').split('/')[0];\n  \n  // Skip the client's own domain\n  if (domain.includes(query.domain)) continue;\n  \n  prospects.push({\n    json: {\n      client_id: query.client_id,\n      domain: domain,\n      url: url,\n      title: item.title || '',\n      snippet: (item.snippet || '').substring(0, 200),\n      keyword: query.keyword,\n      source: 'n8n-prospector'\n    }\n  });\n}\n\nreturn prospects.length > 0 ? prospects : [{ json: { skip: true } }];"
+      },
+      "id": "parse-results",
+      "name": "Parse Search Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "id": "skip-check", "leftValue": "={{ $json.skip }}", "rightValue": true, "operator": { "type": "boolean", "operation": "notTrue" } }] },
+        "combineOperation": "all"
+      },
+      "id": "filter-skip",
+      "name": "Filter Empty",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO backlink_prospects (client_id, domain, url, status, source, notes) VALUES ('{{$json.client_id}}', '{{$json.domain}}', '{{$json.url}}', 'new', 'n8n-prospector', 'Found via: {{$json.keyword}} | {{$json.title}}') ON CONFLICT DO NOTHING"
+      },
+      "id": "insert-prospect",
+      "name": "Insert Prospect",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1780, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO agent_action_log (client_id, module, action_type, summary, status, triggered_by, created_at) VALUES ('{{$json.client_id}}', 'backlinks', 'prospect_found', 'Backlink prospect found: {{$json.domain}} (via \"{{$json.keyword}}\")', 'success', 'n8n-backlink-prospector', NOW())"
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [2000, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true, \"message\": \"Backlink prospecting completed\" }"
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2000, 500]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": { "main": [[{ "node": "Fetch Client Info", "type": "main", "index": 0 }]] },
+    "Fetch Client Info": { "main": [[{ "node": "Build Search Queries", "type": "main", "index": 0 }]] },
+    "Build Search Queries": { "main": [[{ "node": "Batch Queries", "type": "main", "index": 0 }]] },
+    "Batch Queries": { "main": [[{ "node": "Google Search", "type": "main", "index": 0 }]] },
+    "Google Search": { "main": [[{ "node": "Parse Search Results", "type": "main", "index": 0 }]] },
+    "Parse Search Results": { "main": [[{ "node": "Filter Empty", "type": "main", "index": 0 }]] },
+    "Filter Empty": { "main": [[{ "node": "Insert Prospect", "type": "main", "index": 0 }]] },
+    "Insert Prospect": { "main": [[{ "node": "Log Action", "type": "main", "index": 0 }, { "node": "Respond", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "NEXUS-SEO" }]
+}

@@ -1,0 +1,120 @@
+{
+  "name": "NEXUS - Outreach Runner",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "triggerAtHour": 9 }] }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 9AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT bp.id AS prospect_id, bp.client_id, bp.domain, bp.contact_name, bp.contact_email, c.name AS client_name, c.domain AS client_domain FROM backlink_prospects bp JOIN clients c ON bp.client_id = c.id WHERE bp.status = 'new' AND bp.contact_email IS NOT NULL AND c.status = 'active' ORDER BY bp.domain_authority DESC NULLS LAST LIMIT 50"
+      },
+      "id": "fetch-pending",
+      "name": "Fetch Pending Outreach",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [460, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT properties FROM integrations WHERE provider = 'smtp-email' AND is_active = true LIMIT 1"
+      },
+      "id": "fetch-smtp",
+      "name": "Fetch SMTP Config",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [460, 500],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": { "batchSize": 10, "options": {} },
+      "id": "batch-prospects",
+      "name": "Batch Prospects",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prospect = $('Batch Prospects').item.json;\nconst firstName = (prospect.contact_name || 'there').split(' ')[0];\n\nconst subject = `Collaboration opportunity with ${prospect.client_name}`;\n\nconst body = `Hi ${firstName},\n\nI came across ${prospect.domain} and really enjoyed your content. I'm reaching out from ${prospect.client_name} (${prospect.client_domain}) to explore a potential collaboration.\n\nWe'd love to contribute a guest article to your site that would be valuable to your readers. We have several topic ideas that align well with your audience.\n\nWould you be open to discussing this? Happy to share our content ideas.\n\nBest regards,\n${prospect.client_name} Team`;\n\nreturn [{\n  json: {\n    ...prospect,\n    subject,\n    body,\n    to: prospect.contact_email\n  }\n}];"
+      },
+      "id": "compose-email",
+      "name": "Compose Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{$('Fetch SMTP Config').item.json.properties.smtp_user}}",
+        "toEmail": "={{$json.to}}",
+        "subject": "={{$json.subject}}",
+        "text": "={{$json.body}}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "send-email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1120, 300],
+      "credentials": { "smtp": { "id": "CONFIGURE_ME", "name": "NEXUS SMTP" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE backlink_prospects SET status = 'contacted', updated_at = NOW() WHERE id = '{{$json.prospect_id}}'"
+      },
+      "id": "update-status",
+      "name": "Mark Contacted",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1340, 200],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO outreach_messages (prospect_id, channel, subject, body, status, sent_at) VALUES ('{{$json.prospect_id}}', 'email', '{{$json.subject}}', '{{$json.body.substring(0, 500)}}', 'sent', NOW()) ON CONFLICT DO NOTHING"
+      },
+      "id": "log-message",
+      "name": "Log Outreach Message",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1340, 400],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO agent_action_log (client_id, module, action_type, summary, status, triggered_by, created_at) VALUES ('{{$json.client_id}}', 'outreach', 'email_sent', 'Outreach email sent to {{$json.contact_name}} at {{$json.domain}}', 'success', 'n8n-outreach-runner', NOW())"
+      },
+      "id": "log-action",
+      "name": "Log Action",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1560, 300],
+      "credentials": { "postgres": { "id": "CONFIGURE_ME", "name": "Neon DB" } }
+    }
+  ],
+  "connections": {
+    "Daily 9AM": { "main": [[{ "node": "Fetch Pending Outreach", "type": "main", "index": 0 }, { "node": "Fetch SMTP Config", "type": "main", "index": 0 }]] },
+    "Fetch Pending Outreach": { "main": [[{ "node": "Batch Prospects", "type": "main", "index": 0 }]] },
+    "Batch Prospects": { "main": [[{ "node": "Compose Email", "type": "main", "index": 0 }]] },
+    "Compose Email": { "main": [[{ "node": "Send Email", "type": "main", "index": 0 }]] },
+    "Send Email": { "main": [[{ "node": "Mark Contacted", "type": "main", "index": 0 }, { "node": "Log Outreach Message", "type": "main", "index": 0 }]] },
+    "Mark Contacted": { "main": [[{ "node": "Log Action", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "NEXUS-SEO" }]
+}
