@@ -168,24 +168,24 @@ export function Topbar() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <a href="/settings/profile" className="block">
-              <DropdownMenuItem>
-                <User className="size-4" aria-hidden="true" />
-                Profile
-              </DropdownMenuItem>
-            </a>
-            <a href="/settings/integrations" className="block">
-              <DropdownMenuItem>
-                <Settings className="size-4" aria-hidden="true" />
-                Settings
-              </DropdownMenuItem>
-            </a>
+            <DropdownMenuItem
+              onClick={() => { setTimeout(() => router.push("/settings/profile"), 0); }}
+            >
+              <User className="size-4" aria-hidden="true" />
+              Profile
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => { setTimeout(() => router.push("/settings/integrations"), 0); }}
+            >
+              <Settings className="size-4" aria-hidden="true" />
+              Settings
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
               onClick={() => {
                 document.cookie = "nexus_session=; path=/; max-age=0";
-                window.location.href = "/login";
+                setTimeout(() => router.push("/login"), 0);
               }}
             >
               <LogOut className="size-4" aria-hidden="true" />

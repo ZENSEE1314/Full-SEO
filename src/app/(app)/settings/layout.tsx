@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 
 import { getSession } from "@/lib/auth/session";
 import { SettingsNav } from "@/components/settings/settings-nav";

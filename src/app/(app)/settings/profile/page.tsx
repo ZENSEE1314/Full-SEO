@@ -9,7 +9,13 @@ export const metadata = {
 };
 
 export default async function ProfilePage() {
-  const session = await getSession();
+  let session;
+  try {
+    session = await getSession();
+  } catch (e) {
+    console.error("[profile] Session error:", e);
+    redirect("/login");
+  }
   if (!session) redirect("/login");
 
   let hasGoogleCredentials = false;
@@ -31,8 +37,8 @@ export default async function ProfilePage() {
         hasReplicateKey = true;
       }
     }
-  } catch {
-    // Table might not exist yet
+  } catch (e) {
+    console.error("[profile] Integrations query error:", e);
   }
 
   return (
