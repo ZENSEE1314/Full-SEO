@@ -119,7 +119,7 @@ export function SeoChecklist(props: SeoChecklistProps) {
       </div>
 
       {/* Progress bar */}
-      <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+      <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden" role="progressbar" aria-valuenow={score} aria-valuemin={0} aria-valuemax={100} aria-label={`SEO score: ${score}%`}>
         <div
           className={cn(
             "h-full rounded-full transition-all duration-500",

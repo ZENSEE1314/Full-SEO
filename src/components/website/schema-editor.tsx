@@ -4,7 +4,6 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Code,
-  Wand2,
   Plus,
   Trash2,
   CheckCircle,
@@ -51,7 +50,7 @@ const SCHEMA_TEMPLATES = [
 export function SchemaEditor({ schemas, pageId, clientId, pageUrl, pageTitle, clientDomain }: SchemaEditorProps) {
   const router = useRouter();
   const [isExpanded, setIsExpanded] = useState(true);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingType, setGeneratingType] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -61,7 +60,7 @@ export function SchemaEditor({ schemas, pageId, clientId, pageUrl, pageTitle, cl
   const typedSchemas = schemas as unknown as Schema[];
 
   const handleGenerate = useCallback(async (schemaType: string) => {
-    setIsGenerating(true);
+    setGeneratingType(schemaType);
     setError(null);
     try {
       const res = await fetch("/api/website/generate-schema", {
@@ -82,7 +81,7 @@ export function SchemaEditor({ schemas, pageId, clientId, pageUrl, pageTitle, cl
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate schema");
     } finally {
-      setIsGenerating(false);
+      setGeneratingType(null);
     }
   }, [pageId, clientId, pageUrl, pageTitle, clientDomain, router]);
 
@@ -213,21 +212,21 @@ export function SchemaEditor({ schemas, pageId, clientId, pageUrl, pageTitle, cl
                       <button
                         onClick={() => handleCopy(schema)}
                         className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
-                        title="Copy as script tag"
+                        aria-label="Copy as script tag"
                       >
                         {copiedId === schema.id ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                       </button>
                       <button
                         onClick={() => handleEdit(schema)}
                         className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
-                        title="Edit"
+                        aria-label="Edit schema"
                       >
                         <Code className="size-3.5" />
                       </button>
                       <button
                         onClick={() => handleDelete(schema.id)}
                         className="rounded p-1 text-muted-foreground hover:text-red-400 hover:bg-red-400/5 transition-colors"
-                        title="Delete"
+                        aria-label="Delete schema"
                       >
                         <Trash2 className="size-3.5" />
                       </button>
@@ -264,9 +263,9 @@ export function SchemaEditor({ schemas, pageId, clientId, pageUrl, pageTitle, cl
                     </pre>
                   )}
 
-                  {schema.errors.length > 0 && (
+                  {(schema.errors ?? []).length > 0 && (
                     <div className="px-3 pb-2 space-y-0.5">
-                      {schema.errors.map((err, i) => (
+                      {(schema.errors ?? []).map((err, i) => (
                         <p key={i} className="text-xs text-red-400">{err}</p>
                       ))}
                     </div>
@@ -288,13 +287,13 @@ export function SchemaEditor({ schemas, pageId, clientId, pageUrl, pageTitle, cl
                     variant="outline"
                     size="sm"
                     onClick={() => handleGenerate(tmpl.type)}
-                    disabled={isGenerating || exists}
+                    disabled={generatingType !== null || exists}
                     className={cn(
                       "gap-1.5 text-xs",
                       exists && "opacity-50"
                     )}
                   >
-                    {isGenerating ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
+                    {generatingType === tmpl.type ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
                     {tmpl.label}
                     {exists && <CheckCircle className="size-3 text-emerald-400" />}
                   </Button>

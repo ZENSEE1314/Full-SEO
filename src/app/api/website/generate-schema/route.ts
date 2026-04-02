@@ -83,6 +83,16 @@ export async function PATCH(req: NextRequest) {
     if (!parsed["@context"]) errors.push("Missing @context");
     if (!parsed["@type"]) errors.push("Missing @type");
 
+    // Verify schema belongs to this client's pages
+    const schemaCheck = await sql`
+      SELECT sm.id FROM schema_markups sm
+      JOIN pages p ON sm.page_id = p.id
+      WHERE sm.id = ${schemaId} AND p.client_id = ${clientId}
+    `;
+    if (schemaCheck.length === 0) {
+      return NextResponse.json({ error: "Schema not found" }, { status: 404 });
+    }
+
     await sql`
       UPDATE schema_markups SET
         json_ld = ${JSON.stringify(parsed)}::jsonb,
@@ -115,6 +125,16 @@ export async function DELETE(req: NextRequest) {
     `;
     if (clientCheck.length === 0) {
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
+    }
+
+    // Verify schema belongs to this client's pages
+    const schemaCheck = await sql`
+      SELECT sm.id FROM schema_markups sm
+      JOIN pages p ON sm.page_id = p.id
+      WHERE sm.id = ${schemaId} AND p.client_id = ${clientId}
+    `;
+    if (schemaCheck.length === 0) {
+      return NextResponse.json({ error: "Schema not found" }, { status: 404 });
     }
 
     await sql`DELETE FROM schema_markups WHERE id = ${schemaId}`;

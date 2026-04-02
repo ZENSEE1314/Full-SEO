@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -139,44 +139,20 @@ export function FileBrowser({ files, clientId, clientDomain, onBack, onRefresh }
   const hasChanges = content !== originalContent;
   const isHtmlFile = selectedFile?.file_type.match(/^(html?|php|jsx|tsx|vue|svelte|astro)$/);
 
-  // Load file content
-  const loadFile = useCallback(async (file: WebsiteFile) => {
-    setSelectedFile(file);
-    setIsLoadingContent(true);
-    setSeoIssues([]);
-    try {
-      const res = await fetch(`/api/website/files?clientId=${clientId}&fileId=${file.id}`);
-      // The GET route returns all files; we need to fetch content separately
-      // Actually, let's fetch from a dedicated endpoint or include content
-      // For now, fetch content via a PATCH-like read
-      const contentRes = await fetch(`/api/website/files?clientId=${clientId}`);
-      const data = await contentRes.json();
-      // We need to get content - let me use a different approach
-      // Actually the content is stored in DB, let me add a content endpoint
-      // For now, we'll use the file list and fetch content inline
-    } catch { /* ignore */ }
-    setIsLoadingContent(false);
-  }, [clientId]);
-
-  // Fetch file content directly
-  const fetchFileContent = useCallback(async (fileId: string) => {
-    try {
-      const res = await fetch(`/api/website/files?clientId=${clientId}&fileId=${fileId}&withContent=true`);
-      const data = await res.json();
-      if (res.ok && data.content !== undefined) {
-        return data.content as string;
-      }
-    } catch { /* ignore */ }
-    return "";
-  }, [clientId]);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSelectFile = useCallback(async (file: WebsiteFile) => {
     setSelectedFile(file);
     setIsLoadingContent(true);
     setSeoIssues([]);
     setSaveSuccess(false);
+    setSaveError(null);
+    let fileContent = "";
     try {
-      const fileContent = await fetchFileContent(file.id);
+      const res = await fetch(`/api/website/files?clientId=${clientId}&fileId=${file.id}&withContent=true`);
+      if (!res.ok) throw new Error("Failed to load file");
+      const data = await res.json();
+      fileContent = (data.content as string) ?? "";
       setContent(fileContent);
       setOriginalContent(fileContent);
     } catch {
@@ -184,7 +160,25 @@ export function FileBrowser({ files, clientId, clientDomain, onBack, onRefresh }
       setOriginalContent("");
     }
     setIsLoadingContent(false);
-  }, [fetchFileContent]);
+
+    // Auto-analyze HTML files after loading
+    const isHtml = file.file_type.match(/^(html?|php|jsx|tsx|vue|svelte|astro)$/);
+    if (isHtml && fileContent) {
+      setIsAnalyzing(true);
+      try {
+        const analyzeRes = await fetch("/api/website/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileId: file.id, clientId, content: fileContent, filePath: file.file_path }),
+        });
+        if (analyzeRes.ok) {
+          const analyzeData = await analyzeRes.json();
+          setSeoIssues(analyzeData.issues ?? []);
+        }
+      } catch { /* auto-analyze is best-effort */ }
+      setIsAnalyzing(false);
+    }
+  }, [clientId]);
 
   const handleSave = useCallback(async () => {
     if (!selectedFile || !hasChanges) return;
@@ -200,7 +194,9 @@ export function FileBrowser({ files, clientId, clientDomain, onBack, onRefresh }
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
       onRefresh();
-    } catch { /* ignore */ }
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Save failed");
+    }
     setIsSaving(false);
   }, [selectedFile, hasChanges, clientId, content, onRefresh]);
 
@@ -247,16 +243,7 @@ export function FileBrowser({ files, clientId, clientDomain, onBack, onRefresh }
     setIsAutoFixing(false);
   }, [selectedFile, isHtmlFile, clientId, content]);
 
-  // Auto-analyze HTML files when selected
-  useEffect(() => {
-    if (selectedFile && isHtmlFile && content) {
-      handleAnalyze();
-    }
-  }, [selectedFile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleDownloadAll = useCallback(async () => {
-    // Trigger download of all files as individual downloads
-    // In a real app you'd zip them; for now download current file
+  const handleDownload = useCallback(async () => {
     if (!selectedFile || !content) return;
     const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
@@ -301,7 +288,7 @@ export function FileBrowser({ files, clientId, clientDomain, onBack, onRefresh }
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={onBack} className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-white/5 hover:text-foreground transition-colors">
+          <button onClick={onBack} aria-label="Go back" className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-white/5 hover:text-foreground transition-colors">
             <ArrowLeft className="size-4" />
           </button>
           <div>
@@ -311,7 +298,7 @@ export function FileBrowser({ files, clientId, clientDomain, onBack, onRefresh }
         </div>
         <div className="flex items-center gap-2">
           {selectedFile && (
-            <Button variant="outline" size="sm" onClick={handleDownloadAll} className="gap-1.5 text-xs">
+            <Button variant="outline" size="sm" onClick={handleDownload} className="gap-1.5 text-xs">
               <Download className="size-3" /> Download
             </Button>
           )}
@@ -333,6 +320,7 @@ export function FileBrowser({ files, clientId, clientDomain, onBack, onRefresh }
                 placeholder="Filter..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                aria-label="Filter files"
                 className="h-7 w-full rounded-md bg-white/[0.04] pl-7 pr-2 text-xs text-foreground placeholder:text-muted-foreground/40 outline-none"
               />
             </div>
@@ -406,6 +394,11 @@ export function FileBrowser({ files, clientId, clientDomain, onBack, onRefresh }
                   </Button>
                 </div>
               </div>
+              {saveError && (
+                <div className="mx-3 mt-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+                  {saveError}
+                </div>
+              )}
               {/* Editor body */}
               {isLoadingContent ? (
                 <div className="flex-1 flex items-center justify-center">
@@ -464,12 +457,14 @@ export function FileBrowser({ files, clientId, clientDomain, onBack, onRefresh }
               <div className="ml-auto flex rounded-md border border-white/[0.06] overflow-hidden">
                 <button
                   onClick={() => setPreviewMode("desktop")}
+                  aria-label="Desktop preview"
                   className={cn("px-1.5 py-0.5", previewMode === "desktop" ? "bg-white/10 text-foreground" : "text-muted-foreground")}
                 >
                   <Monitor className="size-3" />
                 </button>
                 <button
                   onClick={() => setPreviewMode("mobile")}
+                  aria-label="Mobile preview"
                   className={cn("px-1.5 py-0.5", previewMode === "mobile" ? "bg-white/10 text-foreground" : "text-muted-foreground")}
                 >
                   <Smartphone className="size-3" />
@@ -500,7 +495,7 @@ export function FileBrowser({ files, clientId, clientDomain, onBack, onRefresh }
                     title="Preview"
                     className="w-full border-0"
                     style={{ minHeight: "60vh" }}
-                    sandbox="allow-same-origin"
+                    sandbox=""
                   />
                 </div>
               ) : selectedFile ? (

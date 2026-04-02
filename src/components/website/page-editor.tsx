@@ -126,9 +126,9 @@ export function PageEditor({ page, issues, schemas, clientId, clientDomain, onBa
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Generation failed");
       if (data.title && !title) setTitle(data.title);
-      if (data.meta_description) setMetaDescription(data.meta_description);
+      if (data.meta_description && !metaDescription) setMetaDescription(data.meta_description);
       if (data.h1 && !h1) setH1(data.h1);
-      if (data.canonical_url && !canonicalUrl) setCanonicalUrl(data.canonical_url);
+      if (data.canonical_url && canonicalUrl === page.url) setCanonicalUrl(data.canonical_url);
     } catch {
       setSaveError("Failed to generate meta tags");
     } finally {
@@ -151,6 +151,7 @@ export function PageEditor({ page, issues, schemas, clientId, clientDomain, onBa
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={onBack}
+            aria-label="Go back to pages list"
             className="shrink-0 rounded-lg p-2 text-muted-foreground hover:bg-white/5 hover:text-foreground transition-colors"
           >
             <ArrowLeft className="size-4" />
@@ -337,6 +338,7 @@ export function PageEditor({ page, issues, schemas, clientId, clientDomain, onBa
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setPreviewMode("desktop"); }}
+                    aria-label="Desktop preview"
                     className={cn(
                       "px-2 py-1",
                       previewMode === "desktop"
@@ -349,6 +351,7 @@ export function PageEditor({ page, issues, schemas, clientId, clientDomain, onBa
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setPreviewMode("mobile"); }}
+                    aria-label="Mobile preview"
                     className={cn(
                       "px-2 py-1",
                       previewMode === "mobile"
